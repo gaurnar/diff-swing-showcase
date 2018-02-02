@@ -38,7 +38,7 @@ public class FileSelectionForm extends JFrame {
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
         setContentPane(rootPanel);
-        pack(); // TODO why do we need this one?
+        pack();
 
         fileABrowseButton.addActionListener(new BrowseForFileActionListener(fileATextField));
         fileBBrowseButton.addActionListener(new BrowseForFileActionListener(fileBTextField));
