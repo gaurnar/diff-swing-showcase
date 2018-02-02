@@ -1,8 +1,5 @@
 import org.gsoft.showcase.diff.gui.DiffForm;
-import org.gsoft.showcase.diff.logic.DeletedStringsItem;
-import org.gsoft.showcase.diff.logic.DiffListItem;
-import org.gsoft.showcase.diff.logic.EqualStringsItem;
-import org.gsoft.showcase.diff.logic.InsertedStringsItem;
+import org.gsoft.showcase.diff.logic.*;
 
 import javax.swing.*;
 import java.lang.reflect.Array;
@@ -15,8 +12,10 @@ import java.util.stream.StreamSupport;
 public class DiffApplication {
 
     public static void main(String[] args) {
+//        List<MyersDiffGenerator.EditPathEdge> edges = new MyersDiffGenerator().doMyers("abcabba", "cbabac");
+
         SwingUtilities.invokeLater(() -> {
-            // TODO
+            // TODO select files
 //            FileSelectionForm fileSelectionForm = new FileSelectionForm();
 //            fileSelectionForm.setLocationRelativeTo(null);
 //            fileSelectionForm.setVisible(true);
