@@ -1,16 +1,19 @@
 package org.gsoft.showcase.diff.gui;
 
-import org.gsoft.showcase.diff.logic.*;
+import org.gsoft.showcase.diff.logic.DiffGenerator.DiffItem;
+import org.gsoft.showcase.diff.logic.DiffGeneratorUtils;
+import org.gsoft.showcase.diff.logic.DiffGeneratorUtils.TextsLinesEncoding;
 
 import javax.swing.*;
-import javax.swing.border.Border;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class DiffForm extends JFrame {
     private static final class BoundScrollRange {
@@ -77,7 +80,7 @@ public class DiffForm extends JFrame {
         }
     }
 
-    private final List<DiffListItem> diffItems;
+    private final List<DiffItem> diffItems;
 
     private JPanel rootPanel;
     private JLabel fileAPathLabel;
@@ -91,7 +94,9 @@ public class DiffForm extends JFrame {
     private ScrollListener scrollListenerA;
     private ScrollListener scrollListenerB;
 
-    public DiffForm(String fileAPath, String fileBPath, List<DiffListItem> diffItems) {
+    public DiffForm(String fileAPath, String fileBPath,
+                    List<DiffItem> diffItems,
+                    TextsLinesEncoding textsLinesEncoding) {
         this.diffItems = diffItems;
 
         setTitle("Diff");
@@ -101,7 +106,7 @@ public class DiffForm extends JFrame {
         fileAPathLabel.setText(fileAPath);
         fileBPathLabel.setText(fileBPath);
 
-        populateDiffPanes();
+        populateDiffPanes(textsLinesEncoding);
 
         addComponentListener(new ComponentAdapter() {
             @Override
@@ -114,7 +119,7 @@ public class DiffForm extends JFrame {
         pack();
     }
 
-    private void populateDiffPanes() {
+    private void populateDiffPanes(TextsLinesEncoding textsLinesEncoding) {
         JPanel wrapperPanelA = new JPanel();
         JPanel wrapperPanelB = new JPanel();
 
@@ -124,40 +129,45 @@ public class DiffForm extends JFrame {
         editorPanesA = new ArrayList<>();
         editorPanesB = new ArrayList<>();
 
-        for (DiffListItem item : diffItems) {
-            item.accept(new DiffListItemVisitor() {
-                @Override
-                public void visit(EqualStringsItem item) {
-                    JEditorPane editorPaneA = makeEditorPane(item.getStrings(), Color.WHITE);
-                    JEditorPane editorPaneB = makeEditorPane(item.getStrings(), Color.WHITE);
+        for (DiffItem item : diffItems) {
+            JEditorPane editorPane;
+            switch (item.getType()) {
+                case EQUAL:
+                    String decodedString = decodeStrings(textsLinesEncoding, item);
+                    JEditorPane editorPaneA = makeEditorPane(decodedString, Color.WHITE);
+                    JEditorPane editorPaneB = makeEditorPane(decodedString, Color.WHITE);
 
                     wrapperPanelA.add(editorPaneA);
                     editorPanesA.add(editorPaneA);
 
                     wrapperPanelB.add(editorPaneB);
                     editorPanesB.add(editorPaneB);
-                }
 
-                @Override
-                public void visit(DeletedStringsItem item) {
-                    JEditorPane editorPane = makeEditorPane(item.getStrings(), Color.RED);
+                    break;
+
+                case DELETE:
+                    editorPane = makeEditorPane(decodeStrings(textsLinesEncoding, item), Color.RED);
 
                     wrapperPanelA.add(editorPane);
                     editorPanesA.add(editorPane);
 
                     wrapperPanelB.add(makeSeparator(Color.RED));
-                }
 
-                @Override
-                public void visit(InsertedStringsItem item) {
-                    JEditorPane editorPane = makeEditorPane(item.getStrings(), Color.GREEN);
+                    break;
+
+                case INSERT:
+                    editorPane = makeEditorPane(decodeStrings(textsLinesEncoding, item), Color.GREEN);
 
                     wrapperPanelB.add(editorPane);
                     editorPanesB.add(editorPane);
 
                     wrapperPanelA.add(makeSeparator(Color.GREEN));
-                }
-            });
+
+                    break;
+
+                default:
+                    throw new RuntimeException("unexpected diff item type: " + item.getType());
+            }
         }
 
         wrapperPanelA.add(Box.createVerticalGlue());
@@ -167,61 +177,68 @@ public class DiffForm extends JFrame {
         fileBScrollPane.getViewport().setView(wrapperPanelB);
     }
 
+    private static String decodeStrings(TextsLinesEncoding textsLinesEncoding, DiffItem item) {
+        return Arrays.stream(DiffGeneratorUtils.decodeText(item.getChars(), textsLinesEncoding))
+                .collect(Collectors.joining("\n"));
+    }
+
     private void calculateSideBySideScrolling() {
         List<BoundScrollRange> scrollRangesA = new ArrayList<>();
         List<BoundScrollRange> scrollRangesB = new ArrayList<>();
 
-        DiffListItemVisitor diffItemVisitor = new DiffListItemVisitor() {
-            private int editorPanesAIndex = 0;
-            private int editorPanesBIndex = 0;
+        int editorPanesAIndex = 0;
+        int editorPanesBIndex = 0;
 
-            @Override
-            public void visit(EqualStringsItem item) {
-                JEditorPane editorPaneA = editorPanesA.get(editorPanesAIndex++);
-                JEditorPane editorPaneB = editorPanesB.get(editorPanesBIndex++);
+        for (DiffItem item : diffItems) {
+            JEditorPane editorPane;
+            switch (item.getType()) {
+                case EQUAL:
+                    JEditorPane editorPaneA = editorPanesA.get(editorPanesAIndex++);
+                    JEditorPane editorPaneB = editorPanesB.get(editorPanesBIndex++);
 
-                scrollRangesA.add(new BoundScrollRange(
-                        editorPaneA.getY(),
-                        editorPaneA.getY() + editorPaneA.getHeight(),
-                        editorPaneB.getY(),
-                        true
-                ));
+                    scrollRangesA.add(new BoundScrollRange(
+                            editorPaneA.getY(),
+                            editorPaneA.getY() + editorPaneA.getHeight(),
+                            editorPaneB.getY(),
+                            true
+                    ));
 
-                scrollRangesB.add(new BoundScrollRange(
-                        editorPaneB.getY(),
-                        editorPaneB.getY() + editorPaneB.getHeight(),
-                        editorPaneA.getY(),
-                        true
-                ));
+                    scrollRangesB.add(new BoundScrollRange(
+                            editorPaneB.getY(),
+                            editorPaneB.getY() + editorPaneB.getHeight(),
+                            editorPaneA.getY(),
+                            true
+                    ));
+
+                    break;
+
+                case DELETE:
+                    editorPane = editorPanesA.get(editorPanesAIndex++);
+
+                    scrollRangesA.add(new BoundScrollRange(
+                            editorPane.getY(),
+                            editorPane.getY() + editorPane.getHeight(),
+                            scrollRangesB.get(scrollRangesB.size() - 1).endThis,
+                            false
+                    ));
+
+                    break;
+
+                case INSERT:
+                    editorPane = editorPanesB.get(editorPanesBIndex++);
+
+                    scrollRangesB.add(new BoundScrollRange(
+                            editorPane.getY(),
+                            editorPane.getY() + editorPane.getHeight(),
+                            scrollRangesA.get(scrollRangesA.size() - 1).endThis,
+                            false
+                    ));
+
+                    break;
+
+                default:
+                    throw new RuntimeException("unexpected diff item type: " + item.getType());
             }
-
-            @Override
-            public void visit(DeletedStringsItem item) {
-                JEditorPane editorPane = editorPanesA.get(editorPanesAIndex++);
-
-                scrollRangesA.add(new BoundScrollRange(
-                        editorPane.getY(),
-                        editorPane.getY() + editorPane.getHeight(),
-                        scrollRangesB.get(scrollRangesB.size() - 1).endThis,
-                        false
-                ));
-            }
-
-            @Override
-            public void visit(InsertedStringsItem item) {
-                JEditorPane editorPane = editorPanesB.get(editorPanesBIndex++);
-
-                scrollRangesB.add(new BoundScrollRange(
-                        editorPane.getY(),
-                        editorPane.getY() + editorPane.getHeight(),
-                        scrollRangesA.get(scrollRangesA.size() - 1).endThis,
-                        false
-                ));
-            }
-        };
-
-        for (DiffListItem item : diffItems) {
-            item.accept(diffItemVisitor);
         }
 
         if (scrollListenerA != null) {
@@ -240,8 +257,7 @@ public class DiffForm extends JFrame {
     }
 
     private JEditorPane makeEditorPane(String text, Color backgroundColor) {
-        JEditorPane editorPane = new JEditorPane("text/plain",
-                text.endsWith("\n") ? text.substring(0, text.length() - 1) : text);
+        JEditorPane editorPane = new JEditorPane("text/plain", text);
         editorPane.setEditable(false); // TODO
         editorPane.setMargin(new Insets(0, 0, 0, 0));
         editorPane.setBackground(backgroundColor);
