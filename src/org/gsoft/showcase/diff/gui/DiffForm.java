@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class DiffForm extends JFrame {
+    private static final Color DELETED_LINES_BACKGROUND = new Color(250, 180, 170);
+    private static final Color INSERTED_LINES_BACKGROUND = new Color(174, 255, 202);
+
     private static final class BoundScrollRange {
         final int startThis;
         final int endThis;
@@ -88,8 +91,8 @@ public class DiffForm extends JFrame {
     private JScrollPane fileAScrollPane;
     private JScrollPane fileBScrollPane;
 
-    private List<JEditorPane> editorPanesA;
-    private List<JEditorPane> editorPanesB;
+    private List<JComponent> textComponentsA;
+    private List<JComponent> textComponentsB;
 
     private ScrollListener scrollListenerA;
     private ScrollListener scrollListenerB;
@@ -123,45 +126,50 @@ public class DiffForm extends JFrame {
         JPanel wrapperPanelA = new JPanel();
         JPanel wrapperPanelB = new JPanel();
 
+        wrapperPanelA.setBackground(Color.WHITE);
+        wrapperPanelB.setBackground(Color.WHITE);
+
         wrapperPanelA.setLayout(new BoxLayout(wrapperPanelA, BoxLayout.PAGE_AXIS));
         wrapperPanelB.setLayout(new BoxLayout(wrapperPanelB, BoxLayout.PAGE_AXIS));
 
-        editorPanesA = new ArrayList<>();
-        editorPanesB = new ArrayList<>();
+        textComponentsA = new ArrayList<>();
+        textComponentsB = new ArrayList<>();
 
         for (DiffItem item : diffItems) {
-            JEditorPane editorPane;
+            JComponent textComponent;
             switch (item.getType()) {
                 case EQUAL:
                     String decodedString = decodeStrings(textsLinesEncoding, item);
-                    JEditorPane editorPaneA = makeEditorPane(decodedString, Color.WHITE);
-                    JEditorPane editorPaneB = makeEditorPane(decodedString, Color.WHITE);
+                    JComponent textComponentA = makeTextComponent(decodedString, Color.WHITE);
+                    JComponent textComponentB = makeTextComponent(decodedString, Color.WHITE);
 
-                    wrapperPanelA.add(editorPaneA);
-                    editorPanesA.add(editorPaneA);
+                    wrapperPanelA.add(textComponentA);
+                    textComponentsA.add(textComponentA);
 
-                    wrapperPanelB.add(editorPaneB);
-                    editorPanesB.add(editorPaneB);
+                    wrapperPanelB.add(textComponentB);
+                    textComponentsB.add(textComponentB);
 
                     break;
 
                 case DELETE:
-                    editorPane = makeEditorPane(decodeStrings(textsLinesEncoding, item), Color.RED);
+                    textComponent = makeTextComponent(decodeStrings(textsLinesEncoding, item),
+                            DELETED_LINES_BACKGROUND);
 
-                    wrapperPanelA.add(editorPane);
-                    editorPanesA.add(editorPane);
+                    wrapperPanelA.add(textComponent);
+                    textComponentsA.add(textComponent);
 
-                    wrapperPanelB.add(makeSeparator(Color.RED));
+                    wrapperPanelB.add(makeSeparator(DELETED_LINES_BACKGROUND));
 
                     break;
 
                 case INSERT:
-                    editorPane = makeEditorPane(decodeStrings(textsLinesEncoding, item), Color.GREEN);
+                    textComponent = makeTextComponent(decodeStrings(textsLinesEncoding, item),
+                            INSERTED_LINES_BACKGROUND);
 
-                    wrapperPanelB.add(editorPane);
-                    editorPanesB.add(editorPane);
+                    wrapperPanelB.add(textComponent);
+                    textComponentsB.add(textComponent);
 
-                    wrapperPanelA.add(makeSeparator(Color.GREEN));
+                    wrapperPanelA.add(makeSeparator(INSERTED_LINES_BACKGROUND));
 
                     break;
 
@@ -190,47 +198,47 @@ public class DiffForm extends JFrame {
         int editorPanesBIndex = 0;
 
         for (DiffItem item : diffItems) {
-            JEditorPane editorPane;
+            JComponent textComponent;
             switch (item.getType()) {
                 case EQUAL:
-                    JEditorPane editorPaneA = editorPanesA.get(editorPanesAIndex++);
-                    JEditorPane editorPaneB = editorPanesB.get(editorPanesBIndex++);
+                    JComponent textComponentA = textComponentsA.get(editorPanesAIndex++);
+                    JComponent textComponentB = textComponentsB.get(editorPanesBIndex++);
 
                     scrollRangesA.add(new BoundScrollRange(
-                            editorPaneA.getY(),
-                            editorPaneA.getY() + editorPaneA.getHeight(),
-                            editorPaneB.getY(),
+                            textComponentA.getY(),
+                            textComponentA.getY() + textComponentA.getHeight(),
+                            textComponentB.getY(),
                             true
                     ));
 
                     scrollRangesB.add(new BoundScrollRange(
-                            editorPaneB.getY(),
-                            editorPaneB.getY() + editorPaneB.getHeight(),
-                            editorPaneA.getY(),
+                            textComponentB.getY(),
+                            textComponentB.getY() + textComponentB.getHeight(),
+                            textComponentA.getY(),
                             true
                     ));
 
                     break;
 
                 case DELETE:
-                    editorPane = editorPanesA.get(editorPanesAIndex++);
+                    textComponent = textComponentsA.get(editorPanesAIndex++);
 
                     scrollRangesA.add(new BoundScrollRange(
-                            editorPane.getY(),
-                            editorPane.getY() + editorPane.getHeight(),
-                            scrollRangesB.get(scrollRangesB.size() - 1).endThis,
+                            textComponent.getY(),
+                            textComponent.getY() + textComponent.getHeight(),
+                            !scrollRangesB.isEmpty() ? scrollRangesB.get(scrollRangesB.size() - 1).endThis : 0,
                             false
                     ));
 
                     break;
 
                 case INSERT:
-                    editorPane = editorPanesB.get(editorPanesBIndex++);
+                    textComponent = textComponentsB.get(editorPanesBIndex++);
 
                     scrollRangesB.add(new BoundScrollRange(
-                            editorPane.getY(),
-                            editorPane.getY() + editorPane.getHeight(),
-                            scrollRangesA.get(scrollRangesA.size() - 1).endThis,
+                            textComponent.getY(),
+                            textComponent.getY() + textComponent.getHeight(),
+                            !scrollRangesB.isEmpty() ? scrollRangesA.get(scrollRangesA.size() - 1).endThis : 0,
                             false
                     ));
 
@@ -256,13 +264,15 @@ public class DiffForm extends JFrame {
         fileBScrollPane.getViewport().addChangeListener(scrollListenerB);
     }
 
-    private JEditorPane makeEditorPane(String text, Color backgroundColor) {
-        JEditorPane editorPane = new JEditorPane("text/plain", text);
-        editorPane.setEditable(false); // TODO
-        editorPane.setMargin(new Insets(0, 0, 0, 0));
-        editorPane.setBackground(backgroundColor);
-        editorPane.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-        return editorPane;
+    private JTextArea makeTextComponent(String text, Color backgroundColor) {
+        JTextArea textArea = new JTextArea(text);
+        textArea.setEditable(false); // TODO
+        textArea.setMargin(new Insets(0, 0, 0, 0));
+        textArea.setBackground(backgroundColor);
+        textArea.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        textArea.setMinimumSize(new Dimension(0, textArea.getPreferredSize().height));
+        textArea.setLineWrap(false);
+        return textArea;
     }
 
     private JSeparator makeSeparator(Color color) {

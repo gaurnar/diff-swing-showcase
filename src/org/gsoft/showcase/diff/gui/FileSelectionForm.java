@@ -7,6 +7,7 @@ import org.gsoft.showcase.diff.logic.MyersDiffGenerator;
 import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -23,12 +24,19 @@ public class FileSelectionForm extends JFrame {
 
         @Override
         public void actionPerformed(ActionEvent e) {
-            JFileChooser fileChooser = new JFileChooser();
+            JFileChooser fileChooser;
+            if (selectedDirectoryPath != null) {
+                fileChooser = new JFileChooser(selectedDirectoryPath);
+            } else {
+                fileChooser = new JFileChooser();
+            }
 
             int result = fileChooser.showOpenDialog(FileSelectionForm.this);
 
             if (result == JFileChooser.APPROVE_OPTION) {
-                relatedTextField.setText(fileChooser.getSelectedFile().getAbsolutePath());
+                File selectedFile = fileChooser.getSelectedFile();
+                relatedTextField.setText(selectedFile.getAbsolutePath());
+                selectedDirectoryPath = selectedFile.getParent();
                 checkForInputComplete();
             }
         }
@@ -40,6 +48,8 @@ public class FileSelectionForm extends JFrame {
     private JButton fileBBrowseButton;
     private JButton runDiffButton;
     private JPanel rootPanel;
+
+    private String selectedDirectoryPath;
 
     public FileSelectionForm() {
         setTitle("Choose file to diff");
