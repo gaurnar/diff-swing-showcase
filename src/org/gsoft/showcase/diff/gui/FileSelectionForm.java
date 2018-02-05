@@ -5,6 +5,7 @@ import org.gsoft.showcase.diff.logic.DiffGeneratorUtils.TextsLinesEncoding;
 import org.gsoft.showcase.diff.logic.MyersDiffGenerator;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
@@ -55,6 +56,11 @@ public class FileSelectionForm extends JFrame {
         setTitle("Choose file to diff");
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
+        // TODO can it be done in designer?
+        fileABrowseButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        fileBBrowseButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        runDiffButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
         setContentPane(rootPanel);
         pack();
 
@@ -62,6 +68,8 @@ public class FileSelectionForm extends JFrame {
         fileBBrowseButton.addActionListener(new BrowseForFileActionListener(fileBTextField));
 
         runDiffButton.addActionListener(e -> {
+            FileSelectionForm.this.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+
             TextsLinesEncoding textsLinesEncoding = DiffGeneratorUtils.encodeTexts(
                     readFileIntoStringsSplit(fileATextField.getText()),
                     readFileIntoStringsSplit(fileBTextField.getText()));

@@ -38,7 +38,9 @@ public class DiffForm extends JFrame {
         private final JScrollPane thisScrollPane;
         private final JScrollPane otherScrollPane;
 
+        private ScrollListener boundListener;
         private BoundScrollRange currentScrollRange;
+        private boolean ignoreChanges = false;
 
         public ScrollListener(JScrollPane thisScrollPane,
                               JScrollPane otherScrollPane,
@@ -48,8 +50,16 @@ public class DiffForm extends JFrame {
             this.scrollRanges = scrollRanges;
         }
 
+        public void setBoundListener(ScrollListener boundListener) {
+            this.boundListener = boundListener;
+        }
+
         @Override
         public void stateChanged(ChangeEvent e) {
+            if (ignoreChanges) {
+                return;
+            }
+
             Point thisCenterPosition = getViewportCenterPosition(thisScrollPane);
 
             if ((currentScrollRange == null) ||
@@ -64,11 +74,22 @@ public class DiffForm extends JFrame {
             }
 
             Point otherPosition = otherScrollPane.getViewport().getViewPosition();
+
+            if (boundListener != null) {
+                boundListener.ignoreChanges = true; // to avoid cycles
+            }
+
             setViewportCenterPosition(otherScrollPane, new Point(otherPosition.x,
                     currentScrollRange.scrollOther ?
                             currentScrollRange.startOther + thisCenterPosition.y - currentScrollRange.startThis
                             : currentScrollRange.startOther
             ));
+
+            if (boundListener != null) {
+                SwingUtilities.invokeLater(() -> {
+                    boundListener.ignoreChanges = false;
+                });
+            }
         }
 
         private static Point getViewportCenterPosition(JScrollPane scrollPane) {
@@ -80,6 +101,7 @@ public class DiffForm extends JFrame {
         private static void setViewportCenterPosition(JScrollPane scrollPane, Point centerPoint) {
             JViewport viewport = scrollPane.getViewport();
             viewport.setViewPosition(new Point(centerPoint.x, centerPoint.y - viewport.getHeight() / 2));
+            scrollPane.repaint();
         }
     }
 
@@ -260,18 +282,23 @@ public class DiffForm extends JFrame {
         scrollListenerA = new ScrollListener(fileAScrollPane, fileBScrollPane, scrollRangesA);
         scrollListenerB = new ScrollListener(fileBScrollPane, fileAScrollPane, scrollRangesB);
 
+        scrollListenerA.setBoundListener(scrollListenerB);
+        scrollListenerB.setBoundListener(scrollListenerA);
+
         fileAScrollPane.getViewport().addChangeListener(scrollListenerA);
         fileBScrollPane.getViewport().addChangeListener(scrollListenerB);
     }
 
     private JTextArea makeTextComponent(String text, Color backgroundColor) {
         JTextArea textArea = new JTextArea(text);
+        textArea.setFont(new Font("Courier New", Font.PLAIN, 11));
         textArea.setEditable(false); // TODO
         textArea.setMargin(new Insets(0, 0, 0, 0));
         textArea.setBackground(backgroundColor);
         textArea.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
         textArea.setMinimumSize(new Dimension(0, textArea.getPreferredSize().height));
         textArea.setLineWrap(false);
+        textArea.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
         return textArea;
     }
 
