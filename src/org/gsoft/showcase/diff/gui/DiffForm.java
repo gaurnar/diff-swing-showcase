@@ -7,6 +7,7 @@ import org.gsoft.showcase.diff.logic.DiffGeneratorUtils.TextsLinesEncoding;
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
+import javax.swing.text.BadLocationException;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -16,8 +17,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class DiffForm extends JFrame {
-    private static final Color DELETED_LINES_BACKGROUND = new Color(250, 180, 170);
-    private static final Color INSERTED_LINES_BACKGROUND = new Color(174, 255, 202);
+    private static final Color DELETED_LINES_HIGHLIGHT_COLOR = new Color(250, 180, 170);
+    private static final Color INSERTED_LINES_HIGHLIGHT_COLOR = new Color(174, 255, 202);
 
     private static final class BoundScrollRange {
         final int startThis;
@@ -86,9 +87,7 @@ public class DiffForm extends JFrame {
             ));
 
             if (boundListener != null) {
-                SwingUtilities.invokeLater(() -> {
-                    boundListener.ignoreChanges = false;
-                });
+                SwingUtilities.invokeLater(() -> boundListener.ignoreChanges = false);
             }
         }
 
@@ -113,11 +112,14 @@ public class DiffForm extends JFrame {
     private JScrollPane fileAScrollPane;
     private JScrollPane fileBScrollPane;
 
-    private List<JComponent> textComponentsA;
-    private List<JComponent> textComponentsB;
+    private List<DiffItemTextPosition> diffItemPositionsA;
+    private List<DiffItemTextPosition> diffItemPositionsB;
 
     private ScrollListener scrollListenerA;
     private ScrollListener scrollListenerB;
+
+    private JTextArea textAreaA;
+    private JTextArea textAreaB;
 
     public DiffForm(String fileAPath, String fileBPath,
                     List<DiffItem> diffItems,
@@ -131,12 +133,20 @@ public class DiffForm extends JFrame {
         fileAPathLabel.setText(fileAPath);
         fileBPathLabel.setText(fileBPath);
 
-        populateDiffPanes(textsLinesEncoding);
+        try {
+            populateDiffAreas(textsLinesEncoding);
+        } catch (BadLocationException e) {
+            throw new RuntimeException(e);
+        }
 
         addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent e) {
-                calculateSideBySideScrolling();
+                try {
+                    setupSideBySideScrolling();
+                } catch (BadLocationException e1) {
+                    throw new RuntimeException(e1);
+                }
             }
         });
 
@@ -144,54 +154,55 @@ public class DiffForm extends JFrame {
         pack();
     }
 
-    private void populateDiffPanes(TextsLinesEncoding textsLinesEncoding) {
-        JPanel wrapperPanelA = new JPanel();
-        JPanel wrapperPanelB = new JPanel();
+    private static class DiffItemTextPosition {
+        final int start, end;
 
-        wrapperPanelA.setBackground(Color.WHITE);
-        wrapperPanelB.setBackground(Color.WHITE);
+        DiffItemTextPosition(int start, int end) {
+            this.start = start;
+            this.end = end;
+        }
+    }
 
-        wrapperPanelA.setLayout(new BoxLayout(wrapperPanelA, BoxLayout.PAGE_AXIS));
-        wrapperPanelB.setLayout(new BoxLayout(wrapperPanelB, BoxLayout.PAGE_AXIS));
+    private void populateDiffAreas(TextsLinesEncoding textsLinesEncoding) throws BadLocationException {
+        textAreaA = makeTextArea();
+        textAreaB = makeTextArea();
 
-        textComponentsA = new ArrayList<>();
-        textComponentsB = new ArrayList<>();
+        diffItemPositionsA = new ArrayList<>();
+        diffItemPositionsB = new ArrayList<>();
 
         for (DiffItem item : diffItems) {
-            JComponent textComponent;
             switch (item.getType()) {
                 case EQUAL:
-                    String decodedString = decodeStrings(textsLinesEncoding, item);
-                    JComponent textComponentA = makeTextComponent(decodedString, Color.WHITE);
-                    JComponent textComponentB = makeTextComponent(decodedString, Color.WHITE);
+                    String[] decodedStrings = decodeStrings(textsLinesEncoding, item);
 
-                    wrapperPanelA.add(textComponentA);
-                    textComponentsA.add(textComponentA);
-
-                    wrapperPanelB.add(textComponentB);
-                    textComponentsB.add(textComponentB);
+                    diffItemPositionsA.add(addLinesToTextArea(textAreaA, decodedStrings));
+                    diffItemPositionsB.add(addLinesToTextArea(textAreaB, decodedStrings));
 
                     break;
 
                 case DELETE:
-                    textComponent = makeTextComponent(decodeStrings(textsLinesEncoding, item),
-                            DELETED_LINES_BACKGROUND);
+                    DiffItemTextPosition positionA = addLinesToTextArea(textAreaA,
+                            decodeStrings(textsLinesEncoding, item));
 
-                    wrapperPanelA.add(textComponent);
-                    textComponentsA.add(textComponent);
+                    int nextCharPositionB = textAreaB.getLineCount() != 0 ?
+                            textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1) + 1
+                            : 0;
 
-                    wrapperPanelB.add(makeSeparator(DELETED_LINES_BACKGROUND));
+                    diffItemPositionsA.add(positionA);
+                    diffItemPositionsB.add(new DiffItemTextPosition(nextCharPositionB, nextCharPositionB));
 
                     break;
 
                 case INSERT:
-                    textComponent = makeTextComponent(decodeStrings(textsLinesEncoding, item),
-                            INSERTED_LINES_BACKGROUND);
+                    DiffItemTextPosition positionB = addLinesToTextArea(textAreaB,
+                            decodeStrings(textsLinesEncoding, item));
 
-                    wrapperPanelB.add(textComponent);
-                    textComponentsB.add(textComponent);
+                    int nextCharPositionA = textAreaA.getLineCount() != 0 ?
+                            textAreaA.getLineEndOffset(textAreaA.getLineCount() - 1) + 1
+                            : 0;
 
-                    wrapperPanelA.add(makeSeparator(INSERTED_LINES_BACKGROUND));
+                    diffItemPositionsA.add(new DiffItemTextPosition(nextCharPositionA, nextCharPositionA));
+                    diffItemPositionsB.add(positionB);
 
                     break;
 
@@ -200,67 +211,123 @@ public class DiffForm extends JFrame {
             }
         }
 
-        wrapperPanelA.add(Box.createVerticalGlue());
-        wrapperPanelB.add(Box.createVerticalGlue());
+        int diffPositionIdxA = 0;
+        int diffPositionIdxB = 0;
 
-        fileAScrollPane.getViewport().setView(wrapperPanelA);
-        fileBScrollPane.getViewport().setView(wrapperPanelB);
+        // for some reason we can not assign highlighters as we append line to text area;
+        // doing it in separate cycle
+        for (DiffItem item : diffItems) {
+            DiffItemTextPosition positionA = diffItemPositionsA.get(diffPositionIdxA++);
+            DiffItemTextPosition positionB = diffItemPositionsB.get(diffPositionIdxB++);
+
+            switch (item.getType()) {
+                case EQUAL:
+                    // no highlighter necessary
+                    break;
+
+                case DELETE:
+                    textAreaA.getHighlighter().addHighlight(positionA.start, positionA.end,
+                            new WholeLineHighlightPainter(DELETED_LINES_HIGHLIGHT_COLOR));
+                    textAreaB.getHighlighter().addHighlight(positionB.start, positionB.end,
+                            new InsertOrDeletePointHighlighter(DELETED_LINES_HIGHLIGHT_COLOR));
+
+                    break;
+
+                case INSERT:
+                    textAreaA.getHighlighter().addHighlight(positionA.start, positionA.end,
+                            new InsertOrDeletePointHighlighter(INSERTED_LINES_HIGHLIGHT_COLOR));
+                    textAreaB.getHighlighter().addHighlight(positionB.start, positionB.end,
+                            new WholeLineHighlightPainter(INSERTED_LINES_HIGHLIGHT_COLOR));
+
+                    break;
+
+                default:
+                    throw new RuntimeException("unexpected diff item type: " + item.getType());
+            }
+        }
+
+        fileAScrollPane.getViewport().setView(textAreaA);
+        fileBScrollPane.getViewport().setView(textAreaB);
     }
 
-    private static String decodeStrings(TextsLinesEncoding textsLinesEncoding, DiffItem item) {
-        return Arrays.stream(DiffGeneratorUtils.decodeText(item.getChars(), textsLinesEncoding))
-                .collect(Collectors.joining("\n"));
+    private static DiffItemTextPosition addLinesToTextArea(JTextArea textArea, String[] lines) throws BadLocationException {
+        int previousLineCount = textArea.getLineCount();
+        if (previousLineCount != 0) {
+            textArea.append("\n");
+        }
+        textArea.append(Arrays.stream(lines).collect(Collectors.joining("\n")));
+        return new DiffItemTextPosition(textArea.getLineStartOffset(previousLineCount),
+                textArea.getLineEndOffset(textArea.getLineCount() - 1));
     }
 
-    private void calculateSideBySideScrolling() {
+    private static String[] decodeStrings(TextsLinesEncoding textsLinesEncoding, DiffItem item) {
+        return DiffGeneratorUtils.decodeText(item.getChars(), textsLinesEncoding);
+    }
+
+    private void setupSideBySideScrolling() throws BadLocationException {
         List<BoundScrollRange> scrollRangesA = new ArrayList<>();
         List<BoundScrollRange> scrollRangesB = new ArrayList<>();
 
-        int editorPanesAIndex = 0;
-        int editorPanesBIndex = 0;
+        int diffPositionIdxA = 0;
+        int diffPositionIdxB = 0;
 
         for (DiffItem item : diffItems) {
             JComponent textComponent;
             switch (item.getType()) {
                 case EQUAL:
-                    JComponent textComponentA = textComponentsA.get(editorPanesAIndex++);
-                    JComponent textComponentB = textComponentsB.get(editorPanesBIndex++);
+                    DiffItemTextPosition positionA = diffItemPositionsA.get(diffPositionIdxA++);
+                    Rectangle firstCharRectA = textAreaA.modelToView(positionA.start);
+                    Rectangle lastCharRectA = textAreaA.modelToView(positionA.end);
+
+                    DiffItemTextPosition positionB = diffItemPositionsB.get(diffPositionIdxB++);
+                    Rectangle firstCharRectB = textAreaB.modelToView(positionB.start);
+                    Rectangle lastCharRectB = textAreaB.modelToView(positionB.end);
 
                     scrollRangesA.add(new BoundScrollRange(
-                            textComponentA.getY(),
-                            textComponentA.getY() + textComponentA.getHeight(),
-                            textComponentB.getY(),
+                            firstCharRectA.getLocation().y,
+                            lastCharRectA.getLocation().y + lastCharRectA.height,
+                            firstCharRectB.getLocation().y,
                             true
                     ));
 
                     scrollRangesB.add(new BoundScrollRange(
-                            textComponentB.getY(),
-                            textComponentB.getY() + textComponentB.getHeight(),
-                            textComponentA.getY(),
+                            firstCharRectB.getLocation().y,
+                            lastCharRectB.getLocation().y + lastCharRectB.height,
+                            firstCharRectA.getLocation().y,
                             true
                     ));
 
                     break;
 
                 case DELETE:
-                    textComponent = textComponentsA.get(editorPanesAIndex++);
+                    positionA = diffItemPositionsA.get(diffPositionIdxA++);
+                    firstCharRectA = textAreaA.modelToView(positionA.start);
+                    lastCharRectA = textAreaA.modelToView(positionA.end);
+
+                    positionB = diffItemPositionsB.get(diffPositionIdxB++);
+                    firstCharRectB = textAreaB.modelToView(positionB.start);
 
                     scrollRangesA.add(new BoundScrollRange(
-                            textComponent.getY(),
-                            textComponent.getY() + textComponent.getHeight(),
-                            !scrollRangesB.isEmpty() ? scrollRangesB.get(scrollRangesB.size() - 1).endThis : 0,
+                            firstCharRectA.getLocation().y,
+                            lastCharRectA.getLocation().y + lastCharRectA.height,
+                            firstCharRectB.getLocation().y,
                             false
                     ));
 
                     break;
 
                 case INSERT:
-                    textComponent = textComponentsB.get(editorPanesBIndex++);
+                    positionB = diffItemPositionsB.get(diffPositionIdxB++);
+                    firstCharRectB = textAreaB.modelToView(positionB.start);
+                    lastCharRectB = textAreaB.modelToView(positionB.end);
+
+                    positionA = diffItemPositionsA.get(diffPositionIdxA++);
+                    firstCharRectA = textAreaA.modelToView(positionA.start);
 
                     scrollRangesB.add(new BoundScrollRange(
-                            textComponent.getY(),
-                            textComponent.getY() + textComponent.getHeight(),
-                            !scrollRangesB.isEmpty() ? scrollRangesA.get(scrollRangesA.size() - 1).endThis : 0,
+                            firstCharRectB.getLocation().y,
+                            lastCharRectB.getLocation().y + lastCharRectB.height,
+                            firstCharRectA.getLocation().y,
                             false
                     ));
 
@@ -289,26 +356,13 @@ public class DiffForm extends JFrame {
         fileBScrollPane.getViewport().addChangeListener(scrollListenerB);
     }
 
-    private JTextArea makeTextComponent(String text, Color backgroundColor) {
-        JTextArea textArea = new JTextArea(text);
+    private JTextArea makeTextArea() {
+        JTextArea textArea = new JTextArea();
         textArea.setFont(new Font("Courier New", Font.PLAIN, 11));
         textArea.setEditable(false); // TODO
-        textArea.setMargin(new Insets(0, 0, 0, 0));
-        textArea.setBackground(backgroundColor);
-        textArea.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-        textArea.setMinimumSize(new Dimension(0, textArea.getPreferredSize().height));
         textArea.setLineWrap(false);
         textArea.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
         return textArea;
-    }
-
-    private JSeparator makeSeparator(Color color) {
-        // TODO separator does not resize down; fix this
-        JSeparator separator = new JSeparator(JSeparator.HORIZONTAL);
-        separator.setBackground(color);
-        separator.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-        separator.setMinimumSize(new Dimension(1, 5));
-        return separator;
     }
 
     private static BoundScrollRange findRange(int pos, List<BoundScrollRange> rangesSorted) {
