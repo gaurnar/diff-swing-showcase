@@ -3,11 +3,13 @@ package org.gsoft.showcase.diff.gui;
 import org.gsoft.showcase.diff.logic.DiffGenerator.DiffItem;
 import org.gsoft.showcase.diff.logic.DiffGeneratorUtils;
 import org.gsoft.showcase.diff.logic.DiffGeneratorUtils.TextsLinesEncoding;
+import org.gsoft.showcase.diff.logic.MyersDiffGenerator;
 
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultHighlighter;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -19,6 +21,8 @@ import java.util.stream.Collectors;
 public class DiffForm extends JFrame {
     private static final Color DELETED_LINES_HIGHLIGHT_COLOR = new Color(250, 180, 170);
     private static final Color INSERTED_LINES_HIGHLIGHT_COLOR = new Color(174, 255, 202);
+    private static final Color MODIFIED_LINES_HIGHLIGHT_COLOR = new Color(221, 239, 255);
+    private static final Color MODIFIED_CHARS_HIGHLIGHT_COLOR = new Color(187, 211, 255);
 
     private static final class BoundScrollRange {
         final int startThis;
@@ -104,7 +108,54 @@ public class DiffForm extends JFrame {
         }
     }
 
-    private final List<DiffItem> diffItems;
+    private static class DiffItemTextPosition {
+        final int start, end;
+
+        DiffItemTextPosition(int start, int end) {
+            this.start = start;
+            this.end = end;
+        }
+    }
+
+    /**
+     * TODO convert to type hierarchy
+     */
+    private static final class CharwiseDiffItem {
+        final ExtendedDiffItemType type;
+        final String chars;
+        final String otherChars;
+
+        CharwiseDiffItem(ExtendedDiffItemType type, String chars, String otherChars) {
+            this.type = type;
+            this.chars = chars;
+            this.otherChars = otherChars;
+        }
+    }
+
+    private enum ExtendedDiffItemType {
+        EQUAL,
+        INSERT,
+        DELETE,
+        MODIFIED
+    }
+
+    /**
+     * TODO convert to type hierarchy
+     */
+    private static final class LinewiseDiffItem {
+        final ExtendedDiffItemType type;
+        final String[] strings;
+        final List<CharwiseDiffItem> charwiseDiffItems;
+
+        private LinewiseDiffItem(ExtendedDiffItemType type, String[] strings,
+                                 List<CharwiseDiffItem> charwiseDiffItems) {
+            this.type = type;
+            this.strings = strings;
+            this.charwiseDiffItems = charwiseDiffItems;
+        }
+    }
+
+    private final List<LinewiseDiffItem> diffItems;
 
     private JPanel rootPanel;
     private JLabel fileAPathLabel;
@@ -124,8 +175,6 @@ public class DiffForm extends JFrame {
     public DiffForm(String fileAPath, String fileBPath,
                     List<DiffItem> diffItems,
                     TextsLinesEncoding textsLinesEncoding) {
-        this.diffItems = diffItems;
-
         setTitle("Diff");
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setPreferredSize(new Dimension(800, 600));
@@ -133,8 +182,10 @@ public class DiffForm extends JFrame {
         fileAPathLabel.setText(fileAPath);
         fileBPathLabel.setText(fileBPath);
 
+        this.diffItems = convertDiffItems(diffItems, textsLinesEncoding);
+
         try {
-            populateDiffAreas(textsLinesEncoding);
+            populateDiffAreas();
         } catch (BadLocationException e) {
             throw new RuntimeException(e);
         }
@@ -154,35 +205,150 @@ public class DiffForm extends JFrame {
         pack();
     }
 
-    private static class DiffItemTextPosition {
-        final int start, end;
+    private List<LinewiseDiffItem> convertDiffItems(List<DiffItem> plainItems,
+                                                    TextsLinesEncoding textsLinesEncoding) {
+        List<LinewiseDiffItem> result = new ArrayList<>(plainItems.size()); // at least the same size
+        LinewiseDiffItem pendingItem = null;
 
-        DiffItemTextPosition(int start, int end) {
-            this.start = start;
-            this.end = end;
+        for (DiffItem plainItem : plainItems) {
+            String[] decodedStrings = decodeStrings(textsLinesEncoding, plainItem);
+            switch (plainItem.getType()) {
+                case EQUAL:
+                    if (pendingItem != null) {
+                        result.add(pendingItem);
+                        pendingItem = null;
+                    }
+                    result.add(new LinewiseDiffItem(ExtendedDiffItemType.EQUAL,
+                            decodedStrings,null));
+                    break;
+
+                case INSERT:
+                    if (pendingItem != null) {
+                        if (pendingItem.type == ExtendedDiffItemType.DELETE) {
+                            // got DELETE-INSERT pair
+                            result.add(new LinewiseDiffItem(ExtendedDiffItemType.MODIFIED,
+                                    null, generateCharwiseItems(pendingItem.strings, decodedStrings)));
+                        } else {
+                            result.add(pendingItem);
+                        }
+                        pendingItem = null;
+                    } else {
+                        pendingItem = new LinewiseDiffItem(ExtendedDiffItemType.INSERT,
+                                decodedStrings,null);
+                    }
+                    break;
+
+                case DELETE:
+                    if (pendingItem != null) {
+                        if (pendingItem.type == ExtendedDiffItemType.INSERT) {
+                            // got INSERT-DELETE pair
+                            result.add(new LinewiseDiffItem(ExtendedDiffItemType.MODIFIED,
+                                    null, generateCharwiseItems(decodedStrings, pendingItem.strings)));
+                        } else {
+                            result.add(pendingItem);
+                        }
+                        pendingItem = null;
+                    } else {
+                        pendingItem = new LinewiseDiffItem(ExtendedDiffItemType.DELETE,
+                                decodedStrings,null);
+                    }
+                    break;
+
+                default:
+                    throw new RuntimeException("unexpected diff item type: " + plainItem.getType());
+            }
         }
+
+        if (pendingItem != null) {
+            result.add(pendingItem);
+        }
+
+        return result;
     }
 
-    private void populateDiffAreas(TextsLinesEncoding textsLinesEncoding) throws BadLocationException {
+    private List<CharwiseDiffItem> generateCharwiseItems(String[] deleteLines, String[] insertLines) {
+        String a = Arrays.stream(deleteLines).collect(Collectors.joining("\n"));
+        String b = Arrays.stream(insertLines).collect(Collectors.joining("\n"));
+
+        List<DiffItem> charwisePlainItems = new MyersDiffGenerator().generate(
+                DiffGeneratorUtils.encodeString(a), DiffGeneratorUtils.encodeString(b));
+
+        List<CharwiseDiffItem> result = new ArrayList<>(charwisePlainItems.size()); // at least the same size
+        CharwiseDiffItem pendingItem = null;
+
+        for (DiffItem plainItem : charwisePlainItems) {
+            String decodedString = DiffGeneratorUtils.decodeString(plainItem.getChars());
+            switch (plainItem.getType()) {
+                case EQUAL:
+                    if (pendingItem != null) {
+                        result.add(pendingItem);
+                        pendingItem = null;
+                    }
+                    result.add(new CharwiseDiffItem(ExtendedDiffItemType.EQUAL,
+                            decodedString,null));
+                    break;
+
+                case INSERT:
+                    if (pendingItem != null) {
+                        if (pendingItem.type == ExtendedDiffItemType.DELETE) {
+                            // got DELETE-INSERT pair
+                            result.add(new CharwiseDiffItem(ExtendedDiffItemType.MODIFIED,
+                                    pendingItem.chars, decodedString));
+                        } else {
+                            result.add(pendingItem);
+                        }
+                        pendingItem = null;
+                    } else {
+                        pendingItem = new CharwiseDiffItem(ExtendedDiffItemType.INSERT,
+                                decodedString,null);
+                    }
+                    break;
+
+                case DELETE:
+                    if (pendingItem != null) {
+                        if (pendingItem.type == ExtendedDiffItemType.INSERT) {
+                            // got INSERT-DELETE pair
+                            result.add(new CharwiseDiffItem(ExtendedDiffItemType.MODIFIED,
+                                    decodedString, pendingItem.chars));
+                        } else {
+                            result.add(pendingItem);
+                        }
+                        pendingItem = null;
+                    } else {
+                        pendingItem = new CharwiseDiffItem(ExtendedDiffItemType.DELETE,
+                                decodedString,null);
+                    }
+                    break;
+
+                default:
+                    throw new RuntimeException("unexpected diff item type: " + plainItem.getType());
+            }
+        }
+
+        if (pendingItem != null) {
+            result.add(pendingItem);
+        }
+
+        return result;
+    }
+
+    private void populateDiffAreas() throws BadLocationException {
         textAreaA = makeTextArea();
         textAreaB = makeTextArea();
 
         diffItemPositionsA = new ArrayList<>();
         diffItemPositionsB = new ArrayList<>();
 
-        for (DiffItem item : diffItems) {
-            switch (item.getType()) {
+        for (LinewiseDiffItem item : diffItems) {
+            switch (item.type) {
                 case EQUAL:
-                    String[] decodedStrings = decodeStrings(textsLinesEncoding, item);
-
-                    diffItemPositionsA.add(addLinesToTextArea(textAreaA, decodedStrings));
-                    diffItemPositionsB.add(addLinesToTextArea(textAreaB, decodedStrings));
+                    diffItemPositionsA.add(addLinesToTextArea(textAreaA, item.strings));
+                    diffItemPositionsB.add(addLinesToTextArea(textAreaB, item.strings));
 
                     break;
 
                 case DELETE:
-                    DiffItemTextPosition positionA = addLinesToTextArea(textAreaA,
-                            decodeStrings(textsLinesEncoding, item));
+                    DiffItemTextPosition positionA = addLinesToTextArea(textAreaA, item.strings);
 
                     int nextCharPositionB = textAreaB.getLineCount() != 0 ?
                             textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1) + 1
@@ -194,8 +360,7 @@ public class DiffForm extends JFrame {
                     break;
 
                 case INSERT:
-                    DiffItemTextPosition positionB = addLinesToTextArea(textAreaB,
-                            decodeStrings(textsLinesEncoding, item));
+                    DiffItemTextPosition positionB = addLinesToTextArea(textAreaB, item.strings);
 
                     int nextCharPositionA = textAreaA.getLineCount() != 0 ?
                             textAreaA.getLineEndOffset(textAreaA.getLineCount() - 1) + 1
@@ -206,8 +371,12 @@ public class DiffForm extends JFrame {
 
                     break;
 
+                case MODIFIED:
+                    addModifiedLines(item);
+                    break;
+
                 default:
-                    throw new RuntimeException("unexpected diff item type: " + item.getType());
+                    throw new RuntimeException("unexpected diff item type: " + item.type);
             }
         }
 
@@ -216,11 +385,11 @@ public class DiffForm extends JFrame {
 
         // for some reason we can not assign highlighters as we append line to text area;
         // doing it in separate cycle
-        for (DiffItem item : diffItems) {
+        for (LinewiseDiffItem item : diffItems) {
             DiffItemTextPosition positionA = diffItemPositionsA.get(diffPositionIdxA++);
             DiffItemTextPosition positionB = diffItemPositionsB.get(diffPositionIdxB++);
 
-            switch (item.getType()) {
+            switch (item.type) {
                 case EQUAL:
                     // no highlighter necessary
                     break;
@@ -241,13 +410,106 @@ public class DiffForm extends JFrame {
 
                     break;
 
+                case MODIFIED:
+                    textAreaA.getHighlighter().addHighlight(positionA.start, positionA.end,
+                            new WholeLineHighlightPainter(MODIFIED_LINES_HIGHLIGHT_COLOR));
+                    textAreaB.getHighlighter().addHighlight(positionB.start, positionB.end,
+                            new WholeLineHighlightPainter(MODIFIED_LINES_HIGHLIGHT_COLOR));
+
+                    highlightCharwiseModifications(positionA, positionB, item);
+                    break;
+
                 default:
-                    throw new RuntimeException("unexpected diff item type: " + item.getType());
+                    throw new RuntimeException("unexpected diff item type: " + item.type);
             }
         }
 
         fileAScrollPane.getViewport().setView(textAreaA);
         fileBScrollPane.getViewport().setView(textAreaB);
+    }
+
+    private void addModifiedLines(LinewiseDiffItem modifiedItem) throws BadLocationException {
+        int previousLineCountA = textAreaA.getLineCount();
+        if (previousLineCountA != 0) {
+            textAreaA.append("\n");
+        }
+
+        int previousLineCountB = textAreaB.getLineCount();
+        if (previousLineCountB != 0) {
+            textAreaB.append("\n");
+        }
+
+        for (CharwiseDiffItem charwiseItem : modifiedItem.charwiseDiffItems) {
+            switch (charwiseItem.type) {
+                case EQUAL:
+                    textAreaA.append(charwiseItem.chars);
+                    textAreaB.append(charwiseItem.chars);
+                    break;
+
+                case MODIFIED:
+                    textAreaA.append(charwiseItem.chars);
+                    textAreaB.append(charwiseItem.otherChars);
+                    break;
+
+                case INSERT:
+                    textAreaB.append(charwiseItem.chars);
+                    break;
+
+                case DELETE:
+                    textAreaA.append(charwiseItem.chars);
+                    break;
+
+                default:
+                    throw new RuntimeException("unexpected diff item type: " + charwiseItem.type);
+            }
+        }
+
+        diffItemPositionsA.add(new DiffItemTextPosition(textAreaA.getLineStartOffset(previousLineCountA),
+                textAreaA.getLineEndOffset(textAreaA.getLineCount() - 1)));
+        diffItemPositionsB.add(new DiffItemTextPosition(textAreaB.getLineStartOffset(previousLineCountB),
+                textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1)));
+    }
+
+    private void highlightCharwiseModifications(DiffItemTextPosition positionA, DiffItemTextPosition positionB,
+                                                LinewiseDiffItem modifiedItem) throws BadLocationException {
+        int posA = positionA.start;
+        int posB = positionB.start;
+
+        for (CharwiseDiffItem charwiseItem : modifiedItem.charwiseDiffItems) {
+            switch (charwiseItem.type) {
+                case EQUAL:
+                    // no highlight required
+                    posA += charwiseItem.chars.length();
+                    posB += charwiseItem.chars.length();
+                    break;
+
+                case MODIFIED:
+                    textAreaA.getHighlighter().addHighlight(posA, posA + charwiseItem.chars.length(),
+                            new DefaultHighlighter.DefaultHighlightPainter(MODIFIED_CHARS_HIGHLIGHT_COLOR));
+                    textAreaB.getHighlighter().addHighlight(posB, posB + charwiseItem.otherChars.length(),
+                            new DefaultHighlighter.DefaultHighlightPainter(MODIFIED_CHARS_HIGHLIGHT_COLOR));
+                    posA += charwiseItem.chars.length();
+                    posB += charwiseItem.otherChars.length();
+                    break;
+
+                case INSERT:
+                    // TODO add highlight on insertion point in A
+                    textAreaB.getHighlighter().addHighlight(posB, posB + charwiseItem.chars.length(),
+                            new DefaultHighlighter.DefaultHighlightPainter(INSERTED_LINES_HIGHLIGHT_COLOR));
+                    posB += charwiseItem.chars.length();
+                    break;
+
+                case DELETE:
+                    // TODO add highlight on deletion point in B
+                    textAreaA.getHighlighter().addHighlight(posA, posA + charwiseItem.chars.length(),
+                            new DefaultHighlighter.DefaultHighlightPainter(DELETED_LINES_HIGHLIGHT_COLOR));
+                    posA += charwiseItem.chars.length();
+                    break;
+
+                default:
+                    throw new RuntimeException("unexpected diff item type: " + charwiseItem.type);
+            }
+        }
     }
 
     private static DiffItemTextPosition addLinesToTextArea(JTextArea textArea, String[] lines) throws BadLocationException {
@@ -271,10 +533,11 @@ public class DiffForm extends JFrame {
         int diffPositionIdxA = 0;
         int diffPositionIdxB = 0;
 
-        for (DiffItem item : diffItems) {
+        for (LinewiseDiffItem item : diffItems) {
             JComponent textComponent;
-            switch (item.getType()) {
+            switch (item.type) {
                 case EQUAL:
+                case MODIFIED:  // TODO treat as DELETE or INSERT
                     DiffItemTextPosition positionA = diffItemPositionsA.get(diffPositionIdxA++);
                     Rectangle firstCharRectA = textAreaA.modelToView(positionA.start);
                     Rectangle lastCharRectA = textAreaA.modelToView(positionA.end);
@@ -334,7 +597,7 @@ public class DiffForm extends JFrame {
                     break;
 
                 default:
-                    throw new RuntimeException("unexpected diff item type: " + item.getType());
+                    throw new RuntimeException("unexpected diff item type: " + item.type);
             }
         }
 
