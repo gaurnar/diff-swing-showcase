@@ -67,23 +67,31 @@ public class FileSelectionForm extends JFrame {
         fileABrowseButton.addActionListener(new BrowseForFileActionListener(fileATextField));
         fileBBrowseButton.addActionListener(new BrowseForFileActionListener(fileBTextField));
 
-        runDiffButton.addActionListener(e -> {
-            FileSelectionForm.this.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        runDiffButton.addActionListener(this::runDiff);
+    }
 
+    private void runDiff(ActionEvent e) {
+        FileSelectionForm.this.setVisible(false);
+
+        WaitDialog waitDialog = new WaitDialog();
+        waitDialog.setLocationRelativeTo(null);
+
+        new Thread(() -> {
             TextsLinesEncoding textsLinesEncoding = DiffGeneratorUtils.encodeTexts(
                     readFileIntoStringsSplit(fileATextField.getText()),
                     readFileIntoStringsSplit(fileBTextField.getText()));
 
             DiffForm diffForm = new DiffForm(fileATextField.getText(), fileBTextField.getText(),
-                    // TODO support diff by chars
                     new MyersDiffGenerator().generate(textsLinesEncoding.getTextA(), textsLinesEncoding.getTextB()),
                     textsLinesEncoding);
 
             diffForm.setLocationRelativeTo(null);
             diffForm.setVisible(true);
 
-            FileSelectionForm.this.setVisible(false);
-        });
+            waitDialog.dispose();
+        }).start();
+
+        waitDialog.setVisible(true);
     }
 
     private void checkForInputComplete() {
