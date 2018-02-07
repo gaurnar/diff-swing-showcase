@@ -77,16 +77,24 @@ public class FileSelectionForm extends JFrame {
         waitDialog.setLocationRelativeTo(null);
 
         new Thread(() -> {
-            TextsLinesEncoding textsLinesEncoding = DiffGeneratorUtils.encodeTexts(
-                    readFileIntoStringsSplit(fileATextField.getText()),
-                    readFileIntoStringsSplit(fileBTextField.getText()));
+            try {
+                TextsLinesEncoding textsLinesEncoding = DiffGeneratorUtils.encodeTexts(
+                        readFileIntoStringsSplit(fileATextField.getText()),
+                        readFileIntoStringsSplit(fileBTextField.getText()));
 
-            DiffForm diffForm = new DiffForm(fileATextField.getText(), fileBTextField.getText(),
-                    new MyersDiffGenerator().generate(textsLinesEncoding.getTextA(), textsLinesEncoding.getTextB()),
-                    textsLinesEncoding);
+                DiffForm diffForm = new DiffForm(fileATextField.getText(), fileBTextField.getText(),
+                        new MyersDiffGenerator().generate(textsLinesEncoding.getTextA(), textsLinesEncoding.getTextB()),
+                        textsLinesEncoding);
 
-            diffForm.setLocationRelativeTo(null);
-            diffForm.setVisible(true);
+                diffForm.setLocationRelativeTo(null);
+                diffForm.setVisible(true);
+            } catch (Throwable t) {
+                JOptionPane.showMessageDialog(waitDialog,
+                        String.format("Failed to compute diff!\n%s: %s", t.getClass().getSimpleName(), t.getMessage()),
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                t.printStackTrace();
+                System.exit(1);
+            }
 
             waitDialog.dispose();
         }).start();
