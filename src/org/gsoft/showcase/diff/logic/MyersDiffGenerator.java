@@ -1,8 +1,16 @@
 package org.gsoft.showcase.diff.logic;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
+/**
+ * As described in:
+ * Myers E. An O(ND) Difference Algorithm and Its Variations.
+ *
+ * Available at:
+ * https://neil.fraser.name/software/diff_match_patch/myers.pdf
+ */
 public final class MyersDiffGenerator implements DiffGenerator {
     private static final int MAX_SCRIPT_SIZE = 10000;
 
@@ -79,15 +87,8 @@ public final class MyersDiffGenerator implements DiffGenerator {
     }
 
     private static List<EditPathEdge> doMyers(int[] a, int[] b) {
-        //
-        // As described in:
-        // Myers E. An O(ND) Difference Algorithm and Its Variations.
-        //
-        // Available at:
-        // https://neil.fraser.name/software/diff_match_patch/myers.pdf
-        //
+        // Simple, unoptimized version
         // TODO implement optimized version
-        //
 
         final int N = a.length;
         final int M = b.length;
@@ -115,69 +116,78 @@ public final class MyersDiffGenerator implements DiffGenerator {
                 }
                 Vd[D][indexV(k)] = x;
                 if (x >= N && y >= M) {
-                    return reconstructEditPath(N - M, D, Vd, a, b);
+                    return reconstructEditPath(N, M, D, Vd, a, b);
                 }
             }
         }
         throw new RuntimeException("edit script is too long!");
     }
 
-    private static List<EditPathEdge> reconstructEditPath(int k, int D, int[][] Vd, int[] a, int[] b) {
-        // as described on p. 8 of referenced paper
-        // TODO implement optimized version
+    /**
+     * Based on description on p. 8 of referenced paper (unoptimized version).
+     * Switched from recursion to loop in order to avoid StackOverflowError.
+     *
+     * TODO implement optimized version
+     */
+    private static LinkedList<EditPathEdge> reconstructEditPath(int N, int M, int D, int[][] Vd, int[] a, int[] b) {
+        int k = N - M;
 
-        int kx = Vd[D][indexV(k)];
-        int ky = kx - k;
+        LinkedList<EditPathEdge> result = new LinkedList<>();
 
-        int x = kx;
-        int y = ky;
-        int currentSnakeLen = 0;
-        int snakeLenWithNonDiagonalEdge = -1;
+        while (true) {
+            int kx = Vd[D][indexV(k)];
+            int ky = kx - k;
 
-        while (x >= 1 && y >= 1 && charAt(a, x) == charAt(b, y)) {
-            if (D != 0 &&
-                    (Vd[D - 1][indexV(k + 1)] == x || // vertical edge
-                    Vd[D - 1][indexV(k - 1)] == x - 1)) { // horizontal edge
-                snakeLenWithNonDiagonalEdge = currentSnakeLen;
+            int x = kx;
+            int y = ky;
+            int currentSnakeLen = 0;
+            int snakeLenWithNonDiagonalEdge = -1;
+
+            while (x >= 1 && y >= 1 && charAt(a, x) == charAt(b, y)) {
+                if (D != 0 &&
+                        (Vd[D - 1][indexV(k + 1)] == x || // vertical edge
+                                Vd[D - 1][indexV(k - 1)] == x - 1)) { // horizontal edge
+                    snakeLenWithNonDiagonalEdge = currentSnakeLen;
+                }
+
+                currentSnakeLen++;
+                x--;
+                y--;
             }
 
-            currentSnakeLen++;
-            x--; y--;
-        }
+            int snakeLen;
 
-        int snakeLen;
-
-        if (snakeLenWithNonDiagonalEdge != -1) {
-            snakeLen = snakeLenWithNonDiagonalEdge;
-        } else {
-            snakeLen = currentSnakeLen;
-        }
-
-        x = kx - snakeLen;
-        y = ky - snakeLen;
-
-        List<EditPathEdge> recursiveCallResult;
-
-        if (D == 0) {
-            recursiveCallResult = new ArrayList<>();
-        } else {
-            if (Vd[D - 1][indexV(k + 1)] == x) {
-                // vertical edge
-                recursiveCallResult = reconstructEditPath(k + 1, D - 1, Vd, a, b);
-            } else if (Vd[D - 1][indexV(k - 1)] == x - 1) {
-                // horizontal edge
-                recursiveCallResult = reconstructEditPath(k - 1, D - 1, Vd, a, b);
+            if (snakeLenWithNonDiagonalEdge != -1) {
+                snakeLen = snakeLenWithNonDiagonalEdge;
             } else {
-                throw new AssertionError("no non-diagonal edge before maximum snake");
+                snakeLen = currentSnakeLen;
             }
-            recursiveCallResult.add(new EditPathEdge(x, y));
+
+            x = kx - snakeLen;
+            y = ky - snakeLen;
+
+            for (int i = snakeLen; i > 0; i--) { // adding "snake"
+                // note inverted order because of addFirst
+                result.addFirst(new EditPathEdge(x + i, y + i));
+            }
+
+            if (D == 0) {
+                break;
+            } else {
+                if (Vd[D - 1][indexV(k + 1)] == x) {
+                    // vertical edge
+                    k++; D--;
+                } else if (Vd[D - 1][indexV(k - 1)] == x - 1) {
+                    // horizontal edge
+                    k--; D--;
+                } else {
+                    throw new AssertionError("no non-diagonal edge before maximum snake");
+                }
+                result.addFirst(new EditPathEdge(x, y));
+            }
         }
 
-        for (int i = 0; i < snakeLen; i++) { // adding "snake"
-            recursiveCallResult.add(new EditPathEdge(++x, ++y));
-        }
-
-        return recursiveCallResult;
+        return result;
     }
 
     /**
