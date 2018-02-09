@@ -76,6 +76,9 @@ public final class DiffGeneratorUtils {
             String s = text[i];
             int c;
             if (!encodingMap.containsKey(s)) {
+                if (counter == Integer.MAX_VALUE) {
+                    throw new RuntimeException("analyzed texts have too many unique lines");
+                }
                 c = counter++;
                 encodingMap.put(s, c);
                 decodingMap.put(c, s);
