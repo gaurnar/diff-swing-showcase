@@ -29,16 +29,18 @@ public class DiffForm extends JFrame {
         final int endThis;
         final int startOther;
         final boolean scrollOther;
+        final int changeIndex;
 
-        BoundScrollRange(int startThis, int endThis, int startOther, boolean scrollOther) {
+        BoundScrollRange(int startThis, int endThis, int startOther, boolean scrollOther, int changeIndex) {
             this.startThis = startThis;
             this.endThis = endThis;
             this.startOther = startOther;
             this.scrollOther = scrollOther;
+            this.changeIndex = changeIndex;
         }
     }
 
-    private static class ScrollListener implements ChangeListener {
+    private class ScrollListener implements ChangeListener {
         private final List<BoundScrollRange> scrollRanges;
         private final JScrollPane thisScrollPane;
         private final JScrollPane otherScrollPane;
@@ -46,6 +48,7 @@ public class DiffForm extends JFrame {
         private ScrollListener boundListener;
         private BoundScrollRange currentScrollRange;
         private boolean ignoreChanges = false;
+        private boolean ignoreIndexChanges = false;
 
         public ScrollListener(JScrollPane thisScrollPane,
                               JScrollPane otherScrollPane,
@@ -78,6 +81,10 @@ public class DiffForm extends JFrame {
                 }
             }
 
+            if (!ignoreIndexChanges) {
+                currentChangeIndex = currentScrollRange.changeIndex;
+            }
+
             Point otherPosition = otherScrollPane.getViewport().getViewPosition();
 
             if (boundListener != null) {
@@ -95,16 +102,12 @@ public class DiffForm extends JFrame {
             }
         }
 
-        private static Point getViewportCenterPosition(JScrollPane scrollPane) {
-            JViewport viewport = scrollPane.getViewport();
-            Point topViewPosition = viewport.getViewPosition();
-            return new Point(topViewPosition.x, topViewPosition.y + viewport.getHeight() / 2);
+        public boolean isIgnoreIndexChanges() {
+            return ignoreIndexChanges;
         }
 
-        private static void setViewportCenterPosition(JScrollPane scrollPane, Point centerPoint) {
-            JViewport viewport = scrollPane.getViewport();
-            viewport.setViewPosition(new Point(centerPoint.x, centerPoint.y - viewport.getHeight() / 2));
-            scrollPane.repaint();
+        public void setIgnoreIndexChanges(boolean ignoreIndexChanges) {
+            this.ignoreIndexChanges = ignoreIndexChanges;
         }
     }
 
@@ -162,6 +165,8 @@ public class DiffForm extends JFrame {
     private JLabel fileBPathLabel;
     private JScrollPane fileAScrollPane;
     private JScrollPane fileBScrollPane;
+    private JButton prevChangeButton;
+    private JButton nextChangeButton;
 
     private List<DiffItemTextPosition> diffItemPositionsA;
     private List<DiffItemTextPosition> diffItemPositionsB;
@@ -171,6 +176,9 @@ public class DiffForm extends JFrame {
 
     private JTextArea textAreaA;
     private JTextArea textAreaB;
+
+    private List<Integer> changePositions; // positions in textAreaA
+    private int currentChangeIndex = 0;
 
     public DiffForm(String fileAPath, String fileBPath,
                     List<DiffItem> diffItems,
@@ -197,6 +205,32 @@ public class DiffForm extends JFrame {
                     setupSideBySideScrolling();
                 } catch (BadLocationException e1) {
                     throw new RuntimeException(e1);
+                }
+            }
+        });
+
+        prevChangeButton.addActionListener(e -> {
+            if (currentChangeIndex > 2) {
+                currentChangeIndex -= currentChangeIndex % 2 == 0 ? 2 : 1;
+                if (scrollListenerA != null) {
+                    scrollListenerA.setIgnoreIndexChanges(true);
+                }
+                scrollLeftPaneToPosition(changePositions.get(currentChangeIndex / 2 - 1));
+                if (scrollListenerA != null) {
+                    SwingUtilities.invokeLater(() -> scrollListenerA.setIgnoreIndexChanges(true));
+                }
+            }
+        });
+
+        nextChangeButton.addActionListener(e -> {
+            if (currentChangeIndex < changePositions.size() * 2 - 1) {
+                currentChangeIndex += currentChangeIndex % 2 == 0 ? 2 : 1;
+                if (scrollListenerA != null) {
+                    scrollListenerA.setIgnoreIndexChanges(true);
+                }
+                scrollLeftPaneToPosition(changePositions.get(currentChangeIndex / 2 - 1));
+                if (scrollListenerA != null) {
+                    SwingUtilities.invokeLater(() -> scrollListenerA.setIgnoreIndexChanges(true));
                 }
             }
         });
@@ -339,6 +373,8 @@ public class DiffForm extends JFrame {
         diffItemPositionsA = new ArrayList<>();
         diffItemPositionsB = new ArrayList<>();
 
+        changePositions = new ArrayList<>();
+
         for (LinewiseDiffItem item : diffItems) {
             switch (item.type) {
                 case EQUAL:
@@ -357,6 +393,8 @@ public class DiffForm extends JFrame {
                     diffItemPositionsA.add(positionA);
                     diffItemPositionsB.add(new DiffItemTextPosition(nextCharPositionB, nextCharPositionB));
 
+                    changePositions.add(positionA.start);
+
                     break;
 
                 case INSERT:
@@ -368,6 +406,8 @@ public class DiffForm extends JFrame {
 
                     diffItemPositionsA.add(new DiffItemTextPosition(nextCharPositionA, nextCharPositionA));
                     diffItemPositionsB.add(positionB);
+
+                    changePositions.add(nextCharPositionA);
 
                     break;
 
@@ -464,10 +504,16 @@ public class DiffForm extends JFrame {
             }
         }
 
-        diffItemPositionsA.add(new DiffItemTextPosition(textAreaA.getLineStartOffset(previousLineCountA),
-                textAreaA.getLineEndOffset(textAreaA.getLineCount() - 1)));
-        diffItemPositionsB.add(new DiffItemTextPosition(textAreaB.getLineStartOffset(previousLineCountB),
-                textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1)));
+        DiffItemTextPosition positionA = new DiffItemTextPosition(textAreaA.getLineStartOffset(previousLineCountA),
+                textAreaA.getLineEndOffset(textAreaA.getLineCount() - 1));
+
+        DiffItemTextPosition positionB = new DiffItemTextPosition(textAreaB.getLineStartOffset(previousLineCountB),
+                textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1));
+
+        changePositions.add(positionA.start);
+
+        diffItemPositionsA.add(positionA);
+        diffItemPositionsB.add(positionB);
     }
 
     private void highlightCharwiseModifications(DiffItemTextPosition positionA, DiffItemTextPosition positionB,
@@ -532,12 +578,12 @@ public class DiffForm extends JFrame {
 
         int diffPositionIdxA = 0;
         int diffPositionIdxB = 0;
+        int changePositionIdx = 0;
 
         for (LinewiseDiffItem item : diffItems) {
-            JComponent textComponent;
             switch (item.type) {
                 case EQUAL:
-                case MODIFIED:  // TODO treat as DELETE or INSERT
+                case MODIFIED:
                     DiffItemTextPosition positionA = diffItemPositionsA.get(diffPositionIdxA++);
                     Rectangle firstCharRectA = textAreaA.modelToView(positionA.start);
                     Rectangle lastCharRectA = textAreaA.modelToView(positionA.end);
@@ -546,19 +592,25 @@ public class DiffForm extends JFrame {
                     Rectangle firstCharRectB = textAreaB.modelToView(positionB.start);
                     Rectangle lastCharRectB = textAreaB.modelToView(positionB.end);
 
+                    if (item.type == ExtendedDiffItemType.EQUAL) {
+                        changePositionIdx += 1;
+                    } else {
+                        changePositionIdx += changePositionIdx % 2 == 0 ? 2 : 1;
+                    }
+
                     scrollRangesA.add(new BoundScrollRange(
                             firstCharRectA.getLocation().y,
                             lastCharRectA.getLocation().y + lastCharRectA.height,
                             firstCharRectB.getLocation().y,
-                            true
-                    ));
+                            true,
+                            changePositionIdx));
 
                     scrollRangesB.add(new BoundScrollRange(
                             firstCharRectB.getLocation().y,
                             lastCharRectB.getLocation().y + lastCharRectB.height,
                             firstCharRectA.getLocation().y,
-                            true
-                    ));
+                            true,
+                            changePositionIdx));
 
                     break;
 
@@ -570,12 +622,14 @@ public class DiffForm extends JFrame {
                     positionB = diffItemPositionsB.get(diffPositionIdxB++);
                     firstCharRectB = textAreaB.modelToView(positionB.start);
 
+                    changePositionIdx += changePositionIdx % 2 == 0 ? 2 : 1;
+
                     scrollRangesA.add(new BoundScrollRange(
                             firstCharRectA.getLocation().y,
                             lastCharRectA.getLocation().y + lastCharRectA.height,
                             firstCharRectB.getLocation().y,
-                            false
-                    ));
+                            false,
+                            changePositionIdx));
 
                     break;
 
@@ -587,12 +641,14 @@ public class DiffForm extends JFrame {
                     positionA = diffItemPositionsA.get(diffPositionIdxA++);
                     firstCharRectA = textAreaA.modelToView(positionA.start);
 
+                    changePositionIdx += changePositionIdx % 2 == 0 ? 2 : 1;
+
                     scrollRangesB.add(new BoundScrollRange(
                             firstCharRectB.getLocation().y,
                             lastCharRectB.getLocation().y + lastCharRectB.height,
                             firstCharRectA.getLocation().y,
-                            false
-                    ));
+                            false,
+                            changePositionIdx));
 
                     break;
 
@@ -631,10 +687,32 @@ public class DiffForm extends JFrame {
     private static BoundScrollRange findRange(int pos, List<BoundScrollRange> rangesSorted) {
         // TODO use binary search
         for (BoundScrollRange r : rangesSorted) {
-            if ((pos >= r.startThis) && (pos <= r.endThis)) {
+            if ((pos >= r.startThis) && (pos < r.endThis)) {
                 return r;
             }
         }
         return null; // not found
+    }
+
+    private Point getViewportCenterPosition(JScrollPane scrollPane) {
+        JViewport viewport = scrollPane.getViewport();
+        Point topViewPosition = viewport.getViewPosition();
+        return new Point(topViewPosition.x, topViewPosition.y + viewport.getHeight() / 2);
+    }
+
+    private void setViewportCenterPosition(JScrollPane scrollPane, Point centerPoint) {
+        JViewport viewport = scrollPane.getViewport();
+        viewport.setViewPosition(new Point(centerPoint.x, Math.max(0, centerPoint.y - viewport.getHeight() / 2)));
+        scrollPane.repaint();
+    }
+
+    private void scrollLeftPaneToPosition(int position) {
+        Rectangle rect;
+        try {
+            rect = textAreaA.modelToView(position);
+        } catch (BadLocationException e) {
+            throw new RuntimeException(e);
+        }
+        setViewportCenterPosition(fileAScrollPane, new Point(rect.x, rect.y));
     }
 }
