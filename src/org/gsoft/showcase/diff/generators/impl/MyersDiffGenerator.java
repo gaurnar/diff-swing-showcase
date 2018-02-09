@@ -1,4 +1,6 @@
-package org.gsoft.showcase.diff.logic;
+package org.gsoft.showcase.diff.generators.impl;
+
+import org.gsoft.showcase.diff.generators.DiffGenerator;
 
 import java.util.ArrayList;
 import java.util.LinkedList;

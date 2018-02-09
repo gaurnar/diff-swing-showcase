@@ -1,8 +1,8 @@
 package org.gsoft.showcase.diff.gui;
 
-import org.gsoft.showcase.diff.logic.DiffGeneratorUtils;
-import org.gsoft.showcase.diff.logic.DiffGeneratorUtils.TextsLinesEncoding;
-import org.gsoft.showcase.diff.logic.MyersDiffGenerator;
+import org.gsoft.showcase.diff.generators.DiffGeneratorUtils;
+import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.TextsLinesEncoding;
+import org.gsoft.showcase.diff.generators.impl.MyersDiffGenerator;
 
 import javax.swing.*;
 import java.awt.*;

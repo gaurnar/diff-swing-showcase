@@ -1,4 +1,4 @@
-package org.gsoft.showcase.diff.logic;
+package org.gsoft.showcase.diff.generators;
 
 import java.util.List;
 
