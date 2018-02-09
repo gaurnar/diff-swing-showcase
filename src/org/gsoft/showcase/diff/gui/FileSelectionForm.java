@@ -67,10 +67,10 @@ public class FileSelectionForm extends JFrame {
         fileABrowseButton.addActionListener(new BrowseForFileActionListener(fileATextField));
         fileBBrowseButton.addActionListener(new BrowseForFileActionListener(fileBTextField));
 
-        runDiffButton.addActionListener(this::runDiff);
+        runDiffButton.addActionListener((e) -> runDiff());
     }
 
-    private void runDiff(ActionEvent e) {
+    private void runDiff() {
         FileSelectionForm.this.setVisible(false);
 
         WaitDialog waitDialog = new WaitDialog();

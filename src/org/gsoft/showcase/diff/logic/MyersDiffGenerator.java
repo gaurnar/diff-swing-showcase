@@ -14,10 +14,10 @@ import java.util.List;
 public final class MyersDiffGenerator implements DiffGenerator {
     private static final int MAX_SCRIPT_SIZE = 10000;
 
-    private static final class EditPathEdge {
+    private static final class EditPathVertex {
         final int x, y;
 
-        EditPathEdge(int x, int y) {
+        EditPathVertex(int x, int y) {
             this.x = x;
             this.y = y;
         }
@@ -33,9 +33,9 @@ public final class MyersDiffGenerator implements DiffGenerator {
 
         int prevX = 0, prevY = 0;
 
-        List<EditPathEdge> edges = doMyers(a, b);
+        List<EditPathVertex> editPathVertices = doMyers(a, b);
 
-        for (EditPathEdge e : edges) {
+        for (EditPathVertex e : editPathVertices) {
             // TODO validate edge?
             if (e.x > prevX && e.y > prevY) {
                 // diagonal edge = equal char
@@ -60,14 +60,6 @@ public final class MyersDiffGenerator implements DiffGenerator {
         return diffItems;
     }
 
-    private static int[] charsListToArray(List<Integer> list) {
-        int[] result = new int[list.size()];
-        for (int i = 0; i < result.length; i++) {
-            result[i] = list.get(i);
-        }
-        return result;
-    }
-
     private static void flushPendingToDiffItems(List<Integer> equalCharsPending,
                                          List<Integer> insertedCharsPending,
                                          List<Integer> deletedCharsPending,
@@ -86,8 +78,8 @@ public final class MyersDiffGenerator implements DiffGenerator {
         }
     }
 
-    private static List<EditPathEdge> doMyers(int[] a, int[] b) {
-        // Simple, unoptimized version
+    private static List<EditPathVertex> doMyers(int[] a, int[] b) {
+        // Simple, unoptimized version as described on p. 6.
         // TODO implement optimized version
 
         final int N = a.length;
@@ -129,10 +121,10 @@ public final class MyersDiffGenerator implements DiffGenerator {
      *
      * TODO implement optimized version
      */
-    private static LinkedList<EditPathEdge> reconstructEditPath(int N, int M, int D, int[][] Vd, int[] a, int[] b) {
+    private static LinkedList<EditPathVertex> reconstructEditPath(int N, int M, int D, int[][] Vd, int[] a, int[] b) {
         int k = N - M;
 
-        LinkedList<EditPathEdge> result = new LinkedList<>();
+        LinkedList<EditPathVertex> result = new LinkedList<>();
 
         while (true) {
             int kx = Vd[D][indexV(k)];
@@ -168,7 +160,7 @@ public final class MyersDiffGenerator implements DiffGenerator {
 
             for (int i = snakeLen; i > 0; i--) { // adding "snake"
                 // note inverted order because of addFirst
-                result.addFirst(new EditPathEdge(x + i, y + i));
+                result.addFirst(new EditPathVertex(x + i, y + i));
             }
 
             if (D == 0) {
@@ -183,7 +175,7 @@ public final class MyersDiffGenerator implements DiffGenerator {
                 } else {
                     throw new AssertionError("no non-diagonal edge before maximum snake");
                 }
-                result.addFirst(new EditPathEdge(x, y));
+                result.addFirst(new EditPathVertex(x, y));
             }
         }
 
@@ -202,5 +194,9 @@ public final class MyersDiffGenerator implements DiffGenerator {
      */
     private static int charAt(int[] s, int i) {
         return s[i - 1];
+    }
+
+    private static int[] charsListToArray(List<Integer> list) {
+        return list.stream().mapToInt(i -> i).toArray();
     }
 }
