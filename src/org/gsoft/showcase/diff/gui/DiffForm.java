@@ -6,13 +6,10 @@ import org.gsoft.showcase.diff.logic.DiffGeneratorUtils.TextsLinesEncoding;
 import org.gsoft.showcase.diff.logic.MyersDiffGenerator;
 
 import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultHighlighter;
+import javax.swing.text.Highlighter;
 import java.awt.*;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -24,97 +21,10 @@ public class DiffForm extends JFrame {
     private static final Color MODIFIED_LINES_HIGHLIGHT_COLOR = new Color(221, 239, 255);
     private static final Color MODIFIED_CHARS_HIGHLIGHT_COLOR = new Color(187, 211, 255);
 
-    private static final class BoundScrollRange {
-        final int startThis;
-        final int endThis;
-        final int startOther;
-        final boolean scrollOther;
-        final int changeIndex;
-
-        BoundScrollRange(int startThis, int endThis, int startOther, boolean scrollOther, int changeIndex) {
-            this.startThis = startThis;
-            this.endThis = endThis;
-            this.startOther = startOther;
-            this.scrollOther = scrollOther;
-            this.changeIndex = changeIndex;
-        }
-    }
-
-    private class ScrollListener implements ChangeListener {
-        private final List<BoundScrollRange> scrollRanges;
-        private final JScrollPane thisScrollPane;
-        private final JScrollPane otherScrollPane;
-
-        private ScrollListener boundListener;
-        private BoundScrollRange currentScrollRange;
-        private boolean ignoreChanges = false;
-        private boolean ignoreIndexChanges = false;
-
-        public ScrollListener(JScrollPane thisScrollPane,
-                              JScrollPane otherScrollPane,
-                              List<BoundScrollRange> scrollRanges) {
-            this.thisScrollPane = thisScrollPane;
-            this.otherScrollPane = otherScrollPane;
-            this.scrollRanges = scrollRanges;
-        }
-
-        public void setBoundListener(ScrollListener boundListener) {
-            this.boundListener = boundListener;
-        }
-
-        @Override
-        public void stateChanged(ChangeEvent e) {
-            if (ignoreChanges) {
-                return;
-            }
-
-            Point thisCenterPosition = getViewportCenterPosition(thisScrollPane);
-
-            if ((currentScrollRange == null) ||
-                    (thisCenterPosition.y < currentScrollRange.startThis) ||
-                    (thisCenterPosition.y > currentScrollRange.endThis)) {
-                currentScrollRange = findRange(thisCenterPosition.y, scrollRanges);
-                if (currentScrollRange == null) {
-                    // not found
-                    // TODO when can this happen? does not seem to affect UX
-                    return;
-                }
-            }
-
-            if (!ignoreIndexChanges) {
-                currentChangeIndex = currentScrollRange.changeIndex;
-            }
-
-            Point otherPosition = otherScrollPane.getViewport().getViewPosition();
-
-            if (boundListener != null) {
-                boundListener.ignoreChanges = true; // to avoid cycles
-            }
-
-            setViewportCenterPosition(otherScrollPane, new Point(otherPosition.x,
-                    currentScrollRange.scrollOther ?
-                            currentScrollRange.startOther + thisCenterPosition.y - currentScrollRange.startThis
-                            : currentScrollRange.startOther
-            ));
-
-            if (boundListener != null) {
-                SwingUtilities.invokeLater(() -> boundListener.ignoreChanges = false);
-            }
-        }
-
-        public boolean isIgnoreIndexChanges() {
-            return ignoreIndexChanges;
-        }
-
-        public void setIgnoreIndexChanges(boolean ignoreIndexChanges) {
-            this.ignoreIndexChanges = ignoreIndexChanges;
-        }
-    }
-
-    private static class DiffItemTextPosition {
+    private static class TextPosition {
         final int start, end;
 
-        DiffItemTextPosition(int start, int end) {
+        TextPosition(int start, int end) {
             this.start = start;
             this.end = end;
         }
@@ -135,7 +45,7 @@ public class DiffForm extends JFrame {
         }
     }
 
-    private enum ExtendedDiffItemType {
+    public enum ExtendedDiffItemType {
         EQUAL,
         INSERT,
         DELETE,
@@ -168,17 +78,8 @@ public class DiffForm extends JFrame {
     private JButton prevChangeButton;
     private JButton nextChangeButton;
 
-    private List<DiffItemTextPosition> diffItemPositionsA;
-    private List<DiffItemTextPosition> diffItemPositionsB;
-
-    private ScrollListener scrollListenerA;
-    private ScrollListener scrollListenerB;
-
     private JTextArea textAreaA;
     private JTextArea textAreaB;
-
-    private List<Integer> changePositions; // positions in textAreaA
-    private int currentChangeIndex = 0;
 
     public DiffForm(String fileAPath, String fileBPath,
                     List<DiffItem> diffItems,
@@ -192,48 +93,19 @@ public class DiffForm extends JFrame {
 
         this.diffItems = convertDiffItems(diffItems, textsLinesEncoding);
 
+        List<DiffPanesScrollController.DiffItemPosition> diffItemPositions;
+
         try {
-            populateDiffAreas();
+            diffItemPositions = populateDiffAreas();
         } catch (BadLocationException e) {
             throw new RuntimeException(e);
         }
 
-        addComponentListener(new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                try {
-                    setupSideBySideScrolling();
-                } catch (BadLocationException e1) {
-                    throw new RuntimeException(e1);
-                }
-            }
-        });
+        DiffPanesScrollController scrollController = new DiffPanesScrollController(
+                fileAScrollPane, fileBScrollPane, this, diffItemPositions);
 
-        prevChangeButton.addActionListener(e -> {
-            if (currentChangeIndex > 2) {
-                currentChangeIndex -= currentChangeIndex % 2 == 0 ? 2 : 1;
-                if (scrollListenerA != null) {
-                    scrollListenerA.setIgnoreIndexChanges(true);
-                }
-                scrollLeftPaneToPosition(changePositions.get(currentChangeIndex / 2 - 1));
-                if (scrollListenerA != null) {
-                    SwingUtilities.invokeLater(() -> scrollListenerA.setIgnoreIndexChanges(true));
-                }
-            }
-        });
-
-        nextChangeButton.addActionListener(e -> {
-            if (currentChangeIndex < changePositions.size() * 2 - 1) {
-                currentChangeIndex += currentChangeIndex % 2 == 0 ? 2 : 1;
-                if (scrollListenerA != null) {
-                    scrollListenerA.setIgnoreIndexChanges(true);
-                }
-                scrollLeftPaneToPosition(changePositions.get(currentChangeIndex / 2 - 1));
-                if (scrollListenerA != null) {
-                    SwingUtilities.invokeLater(() -> scrollListenerA.setIgnoreIndexChanges(true));
-                }
-            }
-        });
+        prevChangeButton.addActionListener(e -> scrollController.scrollToPreviousChange());
+        nextChangeButton.addActionListener(e -> scrollController.scrollToNextChange());
 
         setContentPane(rootPanel);
         pack();
@@ -366,53 +238,49 @@ public class DiffForm extends JFrame {
         return result;
     }
 
-    private void populateDiffAreas() throws BadLocationException {
+    private List<DiffPanesScrollController.DiffItemPosition> populateDiffAreas() throws BadLocationException {
         textAreaA = makeTextArea();
         textAreaB = makeTextArea();
 
-        diffItemPositionsA = new ArrayList<>();
-        diffItemPositionsB = new ArrayList<>();
-
-        changePositions = new ArrayList<>();
+        List<DiffPanesScrollController.DiffItemPosition> diffItemPositions = new ArrayList<>();
 
         for (LinewiseDiffItem item : diffItems) {
             switch (item.type) {
                 case EQUAL:
-                    diffItemPositionsA.add(addLinesToTextArea(textAreaA, item.strings));
-                    diffItemPositionsB.add(addLinesToTextArea(textAreaB, item.strings));
+                    TextPosition positionA = addLinesToTextArea(textAreaA, item.strings);
+                    TextPosition positionB = addLinesToTextArea(textAreaB, item.strings);
+
+                    diffItemPositions.add(new DiffPanesScrollController.DiffItemPosition(
+                            positionA.start, positionB.start, positionA.end, positionB.end, item.type));
 
                     break;
 
                 case DELETE:
-                    DiffItemTextPosition positionA = addLinesToTextArea(textAreaA, item.strings);
+                    positionA = addLinesToTextArea(textAreaA, item.strings);
 
                     int nextCharPositionB = textAreaB.getLineCount() != 0 ?
                             textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1) + 1
                             : 0;
 
-                    diffItemPositionsA.add(positionA);
-                    diffItemPositionsB.add(new DiffItemTextPosition(nextCharPositionB, nextCharPositionB));
-
-                    changePositions.add(positionA.start);
+                    diffItemPositions.add(new DiffPanesScrollController.DiffItemPosition(
+                            positionA.start, nextCharPositionB, positionA.end, nextCharPositionB, item.type));
 
                     break;
 
                 case INSERT:
-                    DiffItemTextPosition positionB = addLinesToTextArea(textAreaB, item.strings);
+                    positionB = addLinesToTextArea(textAreaB, item.strings);
 
                     int nextCharPositionA = textAreaA.getLineCount() != 0 ?
                             textAreaA.getLineEndOffset(textAreaA.getLineCount() - 1) + 1
                             : 0;
 
-                    diffItemPositionsA.add(new DiffItemTextPosition(nextCharPositionA, nextCharPositionA));
-                    diffItemPositionsB.add(positionB);
-
-                    changePositions.add(nextCharPositionA);
+                    diffItemPositions.add(new DiffPanesScrollController.DiffItemPosition(
+                            nextCharPositionA, positionB.start, nextCharPositionA, positionB.end, item.type));
 
                     break;
 
                 case MODIFIED:
-                    addModifiedLines(item);
+                    diffItemPositions.add(addModifiedLines(item));
                     break;
 
                 default:
@@ -420,55 +288,57 @@ public class DiffForm extends JFrame {
             }
         }
 
-        int diffPositionIdxA = 0;
-        int diffPositionIdxB = 0;
-
         // for some reason we can not assign highlighters as we append line to text area;
         // doing it in separate cycle
-        for (LinewiseDiffItem item : diffItems) {
-            DiffItemTextPosition positionA = diffItemPositionsA.get(diffPositionIdxA++);
-            DiffItemTextPosition positionB = diffItemPositionsB.get(diffPositionIdxB++);
-
-            switch (item.type) {
+        for (int i = 0; i < diffItems.size(); i++) {
+            DiffPanesScrollController.DiffItemPosition itemPos = diffItemPositions.get(i);
+            switch (itemPos.getType()) {
                 case EQUAL:
                     // no highlighter necessary
                     break;
 
                 case DELETE:
-                    textAreaA.getHighlighter().addHighlight(positionA.start, positionA.end,
-                            new WholeLineHighlightPainter(DELETED_LINES_HIGHLIGHT_COLOR));
-                    textAreaB.getHighlighter().addHighlight(positionB.start, positionB.end,
+                    highlightLinewiseDiffItem(itemPos,
+                            new WholeLineHighlightPainter(DELETED_LINES_HIGHLIGHT_COLOR),
                             new InsertOrDeletePointHighlighter(DELETED_LINES_HIGHLIGHT_COLOR));
-
                     break;
 
                 case INSERT:
-                    textAreaA.getHighlighter().addHighlight(positionA.start, positionA.end,
-                            new InsertOrDeletePointHighlighter(INSERTED_LINES_HIGHLIGHT_COLOR));
-                    textAreaB.getHighlighter().addHighlight(positionB.start, positionB.end,
+                    highlightLinewiseDiffItem(itemPos,
+                            new InsertOrDeletePointHighlighter(INSERTED_LINES_HIGHLIGHT_COLOR),
                             new WholeLineHighlightPainter(INSERTED_LINES_HIGHLIGHT_COLOR));
-
                     break;
 
                 case MODIFIED:
-                    textAreaA.getHighlighter().addHighlight(positionA.start, positionA.end,
+                    highlightLinewiseDiffItem(itemPos,
+                            new WholeLineHighlightPainter(MODIFIED_LINES_HIGHLIGHT_COLOR),
                             new WholeLineHighlightPainter(MODIFIED_LINES_HIGHLIGHT_COLOR));
-                    textAreaB.getHighlighter().addHighlight(positionB.start, positionB.end,
-                            new WholeLineHighlightPainter(MODIFIED_LINES_HIGHLIGHT_COLOR));
-
-                    highlightCharwiseModifications(positionA, positionB, item);
+                    highlightCharwiseModifications(itemPos, diffItems.get(i));
                     break;
 
                 default:
-                    throw new RuntimeException("unexpected diff item type: " + item.type);
+                    throw new RuntimeException("unexpected diff item type: " + itemPos.getType());
             }
         }
 
         fileAScrollPane.getViewport().setView(textAreaA);
         fileBScrollPane.getViewport().setView(textAreaB);
+
+        return diffItemPositions;
     }
 
-    private void addModifiedLines(LinewiseDiffItem modifiedItem) throws BadLocationException {
+    private void highlightLinewiseDiffItem(DiffPanesScrollController.DiffItemPosition item,
+                                           Highlighter.HighlightPainter highlightPainterA,
+                                           Highlighter.HighlightPainter highlightPainterB)
+            throws BadLocationException {
+        textAreaA.getHighlighter().addHighlight(item.getStartA(), item.getEndA(),
+                highlightPainterA);
+        textAreaB.getHighlighter().addHighlight(item.getStartB(), item.getEndB(),
+                highlightPainterB);
+    }
+
+    private DiffPanesScrollController.DiffItemPosition addModifiedLines(LinewiseDiffItem modifiedItem)
+            throws BadLocationException {
         int previousLineCountA = textAreaA.getLineCount();
         if (previousLineCountA != 0) {
             textAreaA.append("\n");
@@ -504,22 +374,21 @@ public class DiffForm extends JFrame {
             }
         }
 
-        DiffItemTextPosition positionA = new DiffItemTextPosition(textAreaA.getLineStartOffset(previousLineCountA),
+        TextPosition positionA = new TextPosition(textAreaA.getLineStartOffset(previousLineCountA),
                 textAreaA.getLineEndOffset(textAreaA.getLineCount() - 1));
 
-        DiffItemTextPosition positionB = new DiffItemTextPosition(textAreaB.getLineStartOffset(previousLineCountB),
+        TextPosition positionB = new TextPosition(textAreaB.getLineStartOffset(previousLineCountB),
                 textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1));
 
-        changePositions.add(positionA.start);
-
-        diffItemPositionsA.add(positionA);
-        diffItemPositionsB.add(positionB);
+        return new DiffPanesScrollController.DiffItemPosition(
+                positionA.start, positionB.start, positionA.end, positionB.end,
+                ExtendedDiffItemType.MODIFIED);
     }
 
-    private void highlightCharwiseModifications(DiffItemTextPosition positionA, DiffItemTextPosition positionB,
+    private void highlightCharwiseModifications(DiffPanesScrollController.DiffItemPosition position,
                                                 LinewiseDiffItem modifiedItem) throws BadLocationException {
-        int posA = positionA.start;
-        int posB = positionB.start;
+        int posA = position.getStartA();
+        int posB = position.getStartB();
 
         for (CharwiseDiffItem charwiseItem : modifiedItem.charwiseDiffItems) {
             switch (charwiseItem.type) {
@@ -558,121 +427,18 @@ public class DiffForm extends JFrame {
         }
     }
 
-    private static DiffItemTextPosition addLinesToTextArea(JTextArea textArea, String[] lines) throws BadLocationException {
+    private static TextPosition addLinesToTextArea(JTextArea textArea, String[] lines) throws BadLocationException {
         int previousLineCount = textArea.getLineCount();
         if (previousLineCount != 0) {
             textArea.append("\n");
         }
         textArea.append(Arrays.stream(lines).collect(Collectors.joining("\n")));
-        return new DiffItemTextPosition(textArea.getLineStartOffset(previousLineCount),
+        return new TextPosition(textArea.getLineStartOffset(previousLineCount),
                 textArea.getLineEndOffset(textArea.getLineCount() - 1));
     }
 
     private static String[] decodeStrings(TextsLinesEncoding textsLinesEncoding, DiffItem item) {
         return DiffGeneratorUtils.decodeText(item.getChars(), textsLinesEncoding);
-    }
-
-    private void setupSideBySideScrolling() throws BadLocationException {
-        List<BoundScrollRange> scrollRangesA = new ArrayList<>();
-        List<BoundScrollRange> scrollRangesB = new ArrayList<>();
-
-        int diffPositionIdxA = 0;
-        int diffPositionIdxB = 0;
-        int changePositionIdx = 0;
-
-        for (LinewiseDiffItem item : diffItems) {
-            switch (item.type) {
-                case EQUAL:
-                case MODIFIED:
-                    DiffItemTextPosition positionA = diffItemPositionsA.get(diffPositionIdxA++);
-                    Rectangle firstCharRectA = textAreaA.modelToView(positionA.start);
-                    Rectangle lastCharRectA = textAreaA.modelToView(positionA.end);
-
-                    DiffItemTextPosition positionB = diffItemPositionsB.get(diffPositionIdxB++);
-                    Rectangle firstCharRectB = textAreaB.modelToView(positionB.start);
-                    Rectangle lastCharRectB = textAreaB.modelToView(positionB.end);
-
-                    if (item.type == ExtendedDiffItemType.EQUAL) {
-                        changePositionIdx += 1;
-                    } else {
-                        changePositionIdx += changePositionIdx % 2 == 0 ? 2 : 1;
-                    }
-
-                    scrollRangesA.add(new BoundScrollRange(
-                            firstCharRectA.getLocation().y,
-                            lastCharRectA.getLocation().y + lastCharRectA.height,
-                            firstCharRectB.getLocation().y,
-                            true,
-                            changePositionIdx));
-
-                    scrollRangesB.add(new BoundScrollRange(
-                            firstCharRectB.getLocation().y,
-                            lastCharRectB.getLocation().y + lastCharRectB.height,
-                            firstCharRectA.getLocation().y,
-                            true,
-                            changePositionIdx));
-
-                    break;
-
-                case DELETE:
-                    positionA = diffItemPositionsA.get(diffPositionIdxA++);
-                    firstCharRectA = textAreaA.modelToView(positionA.start);
-                    lastCharRectA = textAreaA.modelToView(positionA.end);
-
-                    positionB = diffItemPositionsB.get(diffPositionIdxB++);
-                    firstCharRectB = textAreaB.modelToView(positionB.start);
-
-                    changePositionIdx += changePositionIdx % 2 == 0 ? 2 : 1;
-
-                    scrollRangesA.add(new BoundScrollRange(
-                            firstCharRectA.getLocation().y,
-                            lastCharRectA.getLocation().y + lastCharRectA.height,
-                            firstCharRectB.getLocation().y,
-                            false,
-                            changePositionIdx));
-
-                    break;
-
-                case INSERT:
-                    positionB = diffItemPositionsB.get(diffPositionIdxB++);
-                    firstCharRectB = textAreaB.modelToView(positionB.start);
-                    lastCharRectB = textAreaB.modelToView(positionB.end);
-
-                    positionA = diffItemPositionsA.get(diffPositionIdxA++);
-                    firstCharRectA = textAreaA.modelToView(positionA.start);
-
-                    changePositionIdx += changePositionIdx % 2 == 0 ? 2 : 1;
-
-                    scrollRangesB.add(new BoundScrollRange(
-                            firstCharRectB.getLocation().y,
-                            lastCharRectB.getLocation().y + lastCharRectB.height,
-                            firstCharRectA.getLocation().y,
-                            false,
-                            changePositionIdx));
-
-                    break;
-
-                default:
-                    throw new RuntimeException("unexpected diff item type: " + item.type);
-            }
-        }
-
-        if (scrollListenerA != null) {
-            fileAScrollPane.getViewport().removeChangeListener(scrollListenerA);
-        }
-
-        if (scrollListenerB != null) {
-            fileBScrollPane.getViewport().removeChangeListener(scrollListenerB);
-        }
-
-        scrollListenerA = new ScrollListener(fileAScrollPane, fileBScrollPane, scrollRangesA);
-        scrollListenerB = new ScrollListener(fileBScrollPane, fileAScrollPane, scrollRangesB);
-
-        scrollListenerA.setBoundListener(scrollListenerB);
-        scrollListenerB.setBoundListener(scrollListenerA);
-
-        fileAScrollPane.getViewport().addChangeListener(scrollListenerA);
-        fileBScrollPane.getViewport().addChangeListener(scrollListenerB);
     }
 
     private JTextArea makeTextArea() {
@@ -682,37 +448,5 @@ public class DiffForm extends JFrame {
         textArea.setLineWrap(false);
         textArea.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
         return textArea;
-    }
-
-    private static BoundScrollRange findRange(int pos, List<BoundScrollRange> rangesSorted) {
-        // TODO use binary search
-        for (BoundScrollRange r : rangesSorted) {
-            if ((pos >= r.startThis) && (pos < r.endThis)) {
-                return r;
-            }
-        }
-        return null; // not found
-    }
-
-    private Point getViewportCenterPosition(JScrollPane scrollPane) {
-        JViewport viewport = scrollPane.getViewport();
-        Point topViewPosition = viewport.getViewPosition();
-        return new Point(topViewPosition.x, topViewPosition.y + viewport.getHeight() / 2);
-    }
-
-    private void setViewportCenterPosition(JScrollPane scrollPane, Point centerPoint) {
-        JViewport viewport = scrollPane.getViewport();
-        viewport.setViewPosition(new Point(centerPoint.x, Math.max(0, centerPoint.y - viewport.getHeight() / 2)));
-        scrollPane.repaint();
-    }
-
-    private void scrollLeftPaneToPosition(int position) {
-        Rectangle rect;
-        try {
-            rect = textAreaA.modelToView(position);
-        } catch (BadLocationException e) {
-            throw new RuntimeException(e);
-        }
-        setViewportCenterPosition(fileAScrollPane, new Point(rect.x, rect.y));
     }
 }
