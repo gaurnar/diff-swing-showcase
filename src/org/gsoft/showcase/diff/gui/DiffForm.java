@@ -10,6 +10,7 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultHighlighter;
 import javax.swing.text.Highlighter;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -110,7 +111,12 @@ public class DiffForm extends JFrame {
                 fileAScrollPane, fileBScrollPane, this, diffMatchingImagePanel,
                 diffItemPositions);
 
+        prevChangeButton.setMnemonic(KeyEvent.VK_LEFT);
+        prevChangeButton.setToolTipText("Go to previous change " + getMnemonicKeyHint("Left"));
         prevChangeButton.addActionListener(e -> scrollController.scrollToPreviousChange());
+
+        nextChangeButton.setMnemonic(KeyEvent.VK_RIGHT);
+        nextChangeButton.setToolTipText("Go to next change " + getMnemonicKeyHint("Right"));
         nextChangeButton.addActionListener(e -> scrollController.scrollToNextChange());
 
         setContentPane(rootPanel);
@@ -463,5 +469,19 @@ public class DiffForm extends JFrame {
         textArea.setLineWrap(false);
         textArea.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
         return textArea;
+    }
+
+    private static String getMnemonicKeyHint(String keyDisplayName) {
+        String mnemonicPrefix;
+
+        String osName = System.getProperty("os.name").toLowerCase();
+
+        if (osName.contains("mac ")) {
+            mnemonicPrefix = "Ctrl+Alt+"; // TODO is this universal?
+        } else {
+            mnemonicPrefix = "Alt+"; // TODO check it
+        }
+
+        return "(" + mnemonicPrefix + keyDisplayName + ")";
     }
 }
