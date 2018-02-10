@@ -25,7 +25,8 @@ public class InsertOrDeletePointHighlighter implements Highlighter.HighlightPain
             Rectangle p0 = mapper.modelToView(c, offs0);
             g.setColor(color);
             ((Graphics2D) g).setStroke(HIGHLIGHT_STROKE);
-            g.drawLine(0, p0.y, c.getWidth(), p0.y);
+            g.drawLine(0, p0.y + 1, // + 1 - for better alignment
+                    c.getWidth(), p0.y);
         } catch (BadLocationException e) {
             // can't render
         }

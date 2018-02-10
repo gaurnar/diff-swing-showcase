@@ -7,6 +7,7 @@ import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public final class DiffPanesScrollController {
@@ -67,6 +68,8 @@ public final class DiffPanesScrollController {
     private final JScrollPane scrollPaneA;
     private final JScrollPane scrollPaneB;
 
+    private final DiffMatchingImagePanel diffMatchingImagePanel;
+
     private final List<DiffItemPosition> diffItemPositions;
 
     private List<BoundScrollRange> scrollRangesA;
@@ -83,9 +86,11 @@ public final class DiffPanesScrollController {
     public DiffPanesScrollController(JScrollPane scrollPaneA,
                                      JScrollPane scrollPaneB,
                                      JFrame diffFrame,
+                                     DiffMatchingImagePanel diffMatchingImagePanel,
                                      List<DiffItemPosition> diffItemPositions) {
         this.scrollPaneA = scrollPaneA;
         this.scrollPaneB = scrollPaneB;
+        this.diffMatchingImagePanel = diffMatchingImagePanel;
         this.diffItemPositions = new ArrayList<>(diffItemPositions);
 
         scrollPaneA.getViewport().addChangeListener(this::onScrollStateChanged);
@@ -205,6 +210,13 @@ public final class DiffPanesScrollController {
                         : currentScrollRange.startOther
         ));
 
+        try {
+            diffMatchingImagePanel.setItemPositions(getDiffItemPositionsInViewport());
+        } catch (BadLocationException ex) {
+            throw new RuntimeException(ex);
+        }
+        diffMatchingImagePanel.repaint();
+
         SwingUtilities.invokeLater(() -> scrollPending = false);
     }
 
@@ -276,6 +288,9 @@ public final class DiffPanesScrollController {
                     throw new RuntimeException("unexpected diff item type: " + item.type);
             }
         }
+
+        diffMatchingImagePanel.setItemPositions(getDiffItemPositionsInViewport());
+        diffMatchingImagePanel.repaint();
     }
 
     private void scrollLeftPaneToCurrentDiffItemPosition() {
@@ -304,6 +319,78 @@ public final class DiffPanesScrollController {
             }
         }
         return null; // not found
+    }
+
+    private List<DiffItemPosition> getDiffItemPositionsInViewport() throws BadLocationException {
+        // TODO fix issue with positioning near end of files
+
+        if (scrollRangesA == null || scrollRangesB == null) {
+            return Collections.emptyList(); // not yet initialized
+        }
+
+        int[] boundsA = getDiffItemBoundsInViewport(scrollPaneA, scrollRangesA);
+        int[] boundsB = getDiffItemBoundsInViewport(scrollPaneB, scrollRangesB);
+
+        if (boundsA == null || boundsB == null) {
+            return Collections.emptyList(); // not yet initialized?
+        }
+
+        int minItemIndex = Math.min(boundsA[0], boundsB[0]);
+        int maxItemIndex = Math.max(boundsA[1], boundsB[1]);
+
+        List<DiffItemPosition> result = new ArrayList<>(maxItemIndex - minItemIndex);
+
+        JTextArea textAreaA = (JTextArea) scrollPaneA.getViewport().getView();
+        JTextArea textAreaB = (JTextArea) scrollPaneB.getViewport().getView();
+
+        int viewportAPosition = scrollPaneA.getViewport().getViewPosition().y;
+        int viewportBPosition = scrollPaneB.getViewport().getViewPosition().y;
+
+        for (int i = minItemIndex; i <= maxItemIndex; i++) {
+            DiffItemPosition position = diffItemPositions.get(i);
+            Rectangle endARect = textAreaA.modelToView(position.endA);
+            Rectangle endBRect = textAreaB.modelToView(position.endB);
+            result.add(new DiffItemPosition(
+                    textAreaA.modelToView(position.startA).y - viewportAPosition,
+                    textAreaB.modelToView(position.startB).y - viewportBPosition,
+                    endARect.y + endARect.height - viewportAPosition,
+                    endBRect.y + endBRect.height - viewportBPosition,
+                    position.type
+            ));
+        }
+
+        return result;
+    }
+
+    private static int[] getDiffItemBoundsInViewport(JScrollPane scrollPane,
+                                                     List<BoundScrollRange> scrollRanges) {
+        Rectangle paneViewRect = scrollPane.getViewport().getViewRect();
+
+        //
+        // TODO use binary search
+        //
+
+        int minItemIndex = -1;
+        for (int i = 0; i < scrollRanges.size(); i++) {
+            if (scrollRanges.get(i).endThis > paneViewRect.y) {
+                minItemIndex = scrollRanges.get(i).diffItemIndex;
+                break;
+            }
+        }
+
+        int maxItemIndex = -1;
+        for (int i = scrollRanges.size() - 1; i > 0; i--) {
+            if (scrollRanges.get(i).startThis < paneViewRect.y + paneViewRect.height) {
+                maxItemIndex = scrollRanges.get(i).diffItemIndex;
+                break;
+            }
+        }
+
+        if (minItemIndex == -1 || maxItemIndex == -1) {
+            return null; // TODO is it possible?
+        }
+
+        return new int[] { minItemIndex, maxItemIndex };
     }
 
     private static Point getViewportCenterPosition(JScrollPane scrollPane) {

@@ -16,10 +16,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class DiffForm extends JFrame {
-    private static final Color DELETED_LINES_HIGHLIGHT_COLOR = new Color(250, 180, 170);
-    private static final Color INSERTED_LINES_HIGHLIGHT_COLOR = new Color(174, 255, 202);
-    private static final Color MODIFIED_LINES_HIGHLIGHT_COLOR = new Color(221, 239, 255);
-    private static final Color MODIFIED_CHARS_HIGHLIGHT_COLOR = new Color(187, 211, 255);
+    public static final Color DELETED_LINES_HIGHLIGHT_COLOR = new Color(250, 180, 170);
+    public static final Color INSERTED_LINES_HIGHLIGHT_COLOR = new Color(174, 255, 202);
+    public static final Color MODIFIED_LINES_HIGHLIGHT_COLOR = new Color(221, 239, 255);
+    public static final Color MODIFIED_CHARS_HIGHLIGHT_COLOR = new Color(187, 211, 255);
 
     private static class TextPosition {
         final int start, end;
@@ -77,6 +77,7 @@ public class DiffForm extends JFrame {
     private JScrollPane fileBScrollPane;
     private JButton prevChangeButton;
     private JButton nextChangeButton;
+    private JPanel diffMatchingWrapperPanel;
 
     private JTextArea textAreaA;
     private JTextArea textAreaB;
@@ -101,8 +102,13 @@ public class DiffForm extends JFrame {
             throw new RuntimeException(e);
         }
 
+        DiffMatchingImagePanel diffMatchingImagePanel = new DiffMatchingImagePanel();
+
+        diffMatchingWrapperPanel.add(diffMatchingImagePanel);
+
         DiffPanesScrollController scrollController = new DiffPanesScrollController(
-                fileAScrollPane, fileBScrollPane, this, diffItemPositions);
+                fileAScrollPane, fileBScrollPane, this, diffMatchingImagePanel,
+                diffItemPositions);
 
         prevChangeButton.addActionListener(e -> scrollController.scrollToPreviousChange());
         nextChangeButton.addActionListener(e -> scrollController.scrollToNextChange());
