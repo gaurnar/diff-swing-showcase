@@ -112,12 +112,16 @@ public class DiffForm extends JFrame {
                 diffItemPositions);
 
         prevChangeButton.setMnemonic(KeyEvent.VK_LEFT);
-        prevChangeButton.setToolTipText("Go to previous change " + getMnemonicKeyHint("Left"));
+        prevChangeButton.setToolTipText("Previous change " + getMnemonicKeyHint("Left"));
         prevChangeButton.addActionListener(e -> scrollController.scrollToPreviousChange());
 
         nextChangeButton.setMnemonic(KeyEvent.VK_RIGHT);
-        nextChangeButton.setToolTipText("Go to next change " + getMnemonicKeyHint("Right"));
+        nextChangeButton.setToolTipText("Next change " + getMnemonicKeyHint("Right"));
         nextChangeButton.addActionListener(e -> scrollController.scrollToNextChange());
+
+        // TODO can it be done in designer?
+        prevChangeButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        nextChangeButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         setContentPane(rootPanel);
         pack();

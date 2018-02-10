@@ -56,6 +56,8 @@ public class FileSelectionForm extends JFrame {
         setTitle("Choose file to diff");
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
+        setResizable(false);
+
         // TODO can it be done in designer?
         fileABrowseButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         fileBBrowseButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));

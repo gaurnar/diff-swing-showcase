@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="diff-swing-showcase:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/diff_swing_showcase_jar</output-path>
+    <root id="archive" name="diff-swing-showcase.jar">
+      <element id="module-output" name="diff-swing-showcase" />
+    </root>
+  </artifact>
+</component>

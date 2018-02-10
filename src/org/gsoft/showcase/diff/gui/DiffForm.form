@@ -54,13 +54,18 @@
           <component id="30513" class="javax.swing.JButton" binding="prevChangeButton">
             <constraints/>
             <properties>
-              <text value="&lt;&lt;"/>
+              <font size="10"/>
+              <icon value="prev.png"/>
+              <text value="Previous change"/>
             </properties>
           </component>
           <component id="54cd6" class="javax.swing.JButton" binding="nextChangeButton">
             <constraints/>
             <properties>
-              <text value="&gt;&gt;"/>
+              <borderPainted value="true"/>
+              <font size="10"/>
+              <icon value="next.png"/>
+              <text value="Next change"/>
             </properties>
           </component>
         </children>
