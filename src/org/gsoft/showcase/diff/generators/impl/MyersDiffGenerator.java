@@ -93,7 +93,7 @@ public final class MyersDiffGenerator implements DiffGenerator {
 
         Vd[0] = new int[MAX_SCRIPT_SIZE * 2];
 
-        for (int D = 0; D <= MAX_SCRIPT_SIZE; D++) {
+        for (int D = 0; D < MAX_SCRIPT_SIZE; D++) {
             if (D != 0) {
                 Vd[D] = Vd[D - 1].clone();
             }
