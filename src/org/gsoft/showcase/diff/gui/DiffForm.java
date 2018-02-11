@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 public class DiffForm extends JFrame {
     public static final Color DELETED_LINES_HIGHLIGHT_COLOR = new Color(250, 180, 170);
     public static final Color INSERTED_LINES_HIGHLIGHT_COLOR = new Color(174, 255, 202);
-    public static final Color MODIFIED_LINES_HIGHLIGHT_COLOR = new Color(221, 239, 255);
+    public static final Color MODIFIED_LINES_HIGHLIGHT_COLOR = new Color(221, 226, 255);
     public static final Color MODIFIED_CHARS_HIGHLIGHT_COLOR = new Color(187, 211, 255);
 
     private static class TextPosition {

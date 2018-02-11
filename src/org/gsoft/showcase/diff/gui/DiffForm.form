@@ -5,7 +5,9 @@
     <constraints>
       <xy x="20" y="20" width="500" height="400"/>
     </constraints>
-    <properties/>
+    <properties>
+      <background color="-1644826"/>
+    </properties>
     <border type="none"/>
     <children>
       <component id="a2f1a" class="javax.swing.JLabel" binding="fileAPathLabel">
@@ -48,7 +50,9 @@
         <constraints>
           <grid row="0" column="0" row-span="1" col-span="3" vsize-policy="3" hsize-policy="3" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
         </constraints>
-        <properties/>
+        <properties>
+          <background color="-1644826"/>
+        </properties>
         <border type="none"/>
         <children>
           <component id="30513" class="javax.swing.JButton" binding="prevChangeButton">

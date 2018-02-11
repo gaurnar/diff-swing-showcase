@@ -88,6 +88,8 @@ public class FileSelectionForm extends JFrame {
                         new MyersDiffGenerator().generate(textsLinesEncoding.getTextA(), textsLinesEncoding.getTextB()),
                         textsLinesEncoding);
 
+                waitDialog.dispose();
+
                 diffForm.setLocationRelativeTo(null);
                 diffForm.setVisible(true);
             } catch (Throwable t) {
@@ -97,8 +99,6 @@ public class FileSelectionForm extends JFrame {
                 t.printStackTrace();
                 System.exit(1);
             }
-
-            waitDialog.dispose();
         }).start();
 
         waitDialog.setVisible(true);
