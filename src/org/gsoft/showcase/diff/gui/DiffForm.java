@@ -399,12 +399,12 @@ public class DiffForm extends JFrame {
     private DiffPanesScrollController.DiffItemPosition addModifiedLines(ByLineDiffItem modifiedItem)
             throws BadLocationException {
         int previousLineCountA = textAreaA.getLineCount();
-        if (previousLineCountA != 0) {
+        if (previousLineCountA != 1) {
             textAreaA.append("\n");
         }
 
         int previousLineCountB = textAreaB.getLineCount();
-        if (previousLineCountB != 0) {
+        if (previousLineCountB != 1) {
             textAreaB.append("\n");
         }
 
@@ -488,7 +488,7 @@ public class DiffForm extends JFrame {
 
     private static TextPosition addLinesToTextArea(JTextArea textArea, String[] lines) throws BadLocationException {
         int previousLineCount = textArea.getLineCount();
-        if (previousLineCount != 0) {
+        if (previousLineCount != 1) {
             textArea.append("\n");
         }
         textArea.append(Arrays.stream(lines).collect(Collectors.joining("\n")));

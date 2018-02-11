@@ -47,16 +47,16 @@ public final class DiffPanesScrollController {
         }
     }
 
-    private static final class BoundScrollRange {
+    private static final class LinkedScrollRange {
         final int startThis;
         final int endThis;
         final int startOther;
         final boolean scrollOther;
         final int diffItemIndex;
 
-        private BoundScrollRange(int startThis, int endThis,
-                                 int startOther, boolean scrollOther,
-                                 int diffItemIndex) {
+        private LinkedScrollRange(int startThis, int endThis,
+                                  int startOther, boolean scrollOther,
+                                  int diffItemIndex) {
             this.startThis = startThis;
             this.endThis = endThis;
             this.startOther = startOther;
@@ -72,11 +72,11 @@ public final class DiffPanesScrollController {
 
     private final List<DiffItemPosition> diffItemPositions;
 
-    private List<BoundScrollRange> scrollRangesA;
-    private List<BoundScrollRange> scrollRangesB;
+    private List<LinkedScrollRange> scrollRangesA;
+    private List<LinkedScrollRange> scrollRangesB;
 
-    private BoundScrollRange currentScrollRangeA;
-    private BoundScrollRange currentScrollRangeB;
+    private LinkedScrollRange currentScrollRangeA;
+    private LinkedScrollRange currentScrollRangeB;
 
     private int currentDiffItemIndex;
 
@@ -154,8 +154,8 @@ public final class DiffPanesScrollController {
         JViewport sourceViewport = (JViewport) e.getSource();
 
         JScrollPane thisScrollPane;
-        BoundScrollRange currentScrollRange;
-        List<BoundScrollRange> scrollRanges;
+        LinkedScrollRange currentScrollRange;
+        List<LinkedScrollRange> scrollRanges;
         JScrollPane otherScrollPane;
 
         if (sourceViewport == scrollPaneA.getViewport()) {
@@ -182,11 +182,12 @@ public final class DiffPanesScrollController {
         if ((currentScrollRange == null) ||
                 (thisCenterPosition.y < currentScrollRange.startThis) ||
                 (thisCenterPosition.y > currentScrollRange.endThis)) {
-            currentScrollRange = findRange(thisCenterPosition.y, scrollRanges);
-            if (currentScrollRange == null) {
+            int scrollRangeIndex = rangesBinarySearchByPosition(thisCenterPosition.y, scrollRanges);
+            if (scrollRangeIndex == -1) {
                 // not found
                 return;
             }
+            currentScrollRange = scrollRanges.get(scrollRangeIndex);
         }
 
         if (thisScrollPane == scrollPaneA) {
@@ -237,14 +238,14 @@ public final class DiffPanesScrollController {
                     Rectangle firstCharRectB = textAreaB.modelToView(item.startB);
                     Rectangle lastCharRectB = textAreaB.modelToView(item.endB);
 
-                    scrollRangesA.add(new BoundScrollRange(
+                    scrollRangesA.add(new LinkedScrollRange(
                             firstCharRectA.getLocation().y,
                             lastCharRectA.getLocation().y + lastCharRectA.height,
                             firstCharRectB.getLocation().y,
                             true,
                             i));
 
-                    scrollRangesB.add(new BoundScrollRange(
+                    scrollRangesB.add(new LinkedScrollRange(
                             firstCharRectB.getLocation().y,
                             lastCharRectB.getLocation().y + lastCharRectB.height,
                             firstCharRectA.getLocation().y,
@@ -259,7 +260,7 @@ public final class DiffPanesScrollController {
 
                     firstCharRectB = textAreaB.modelToView(item.startB);
 
-                    scrollRangesA.add(new BoundScrollRange(
+                    scrollRangesA.add(new LinkedScrollRange(
                             firstCharRectA.getLocation().y,
                             lastCharRectA.getLocation().y + lastCharRectA.height,
                             firstCharRectB.getLocation().y,
@@ -274,7 +275,7 @@ public final class DiffPanesScrollController {
 
                     firstCharRectA = textAreaA.modelToView(item.startA);
 
-                    scrollRangesB.add(new BoundScrollRange(
+                    scrollRangesB.add(new LinkedScrollRange(
                             firstCharRectB.getLocation().y,
                             lastCharRectB.getLocation().y + lastCharRectB.height,
                             firstCharRectA.getLocation().y,
@@ -308,16 +309,6 @@ public final class DiffPanesScrollController {
         setViewportCenterPosition(scrollPaneA, new Point(rect.x, rect.y));
 
         SwingUtilities.invokeLater(() -> changesScrolling = false);
-    }
-
-    private static BoundScrollRange findRange(int pos, List<BoundScrollRange> rangesSorted) {
-        // TODO use binary search
-        for (BoundScrollRange r : rangesSorted) {
-            if ((pos >= r.startThis) && (pos < r.endThis)) {
-                return r;
-            }
-        }
-        return null; // not found
     }
 
     private List<DiffItemPosition> getDiffItemPositionsInViewport() throws BadLocationException {
@@ -362,34 +353,24 @@ public final class DiffPanesScrollController {
     }
 
     private static int[] getDiffItemBoundsInViewport(JScrollPane scrollPane,
-                                                     List<BoundScrollRange> scrollRanges) {
+                                                     List<LinkedScrollRange> scrollRanges) {
         Rectangle paneViewRect = scrollPane.getViewport().getViewRect();
 
-        //
-        // TODO use binary search
-        //
-
-        int minItemIndex = -1;
-        for (int i = 0; i < scrollRanges.size(); i++) {
-            if (scrollRanges.get(i).endThis > paneViewRect.y) {
-                minItemIndex = scrollRanges.get(i).diffItemIndex;
-                break;
-            }
-        }
-
-        int maxItemIndex = -1;
-        for (int i = scrollRanges.size() - 1; i > 0; i--) {
-            if (scrollRanges.get(i).startThis < paneViewRect.y + paneViewRect.height) {
-                maxItemIndex = scrollRanges.get(i).diffItemIndex;
-                break;
-            }
-        }
-
-        if (minItemIndex == -1 || maxItemIndex == -1) {
+        int minRangeIndex = rangesBinarySearchByPosition(paneViewRect.y, scrollRanges);
+        if (minRangeIndex == -1) {
             return null;
         }
 
-        return new int[] { minItemIndex, maxItemIndex };
+        int maxRangeIndex = minRangeIndex;
+        while ((maxRangeIndex < scrollRanges.size() - 1) &&
+                (scrollRanges.get(maxRangeIndex).startThis < paneViewRect.y + paneViewRect.height)) {
+            maxRangeIndex++;
+        }
+
+        return new int[] {
+                scrollRanges.get(minRangeIndex).diffItemIndex,
+                scrollRanges.get(maxRangeIndex).diffItemIndex
+        };
     }
 
     private static Point getViewportCenterPosition(JScrollPane scrollPane) {
@@ -402,5 +383,27 @@ public final class DiffPanesScrollController {
         JViewport viewport = scrollPane.getViewport();
         viewport.setViewPosition(new Point(centerPoint.x, Math.max(0, centerPoint.y - viewport.getHeight() / 2)));
         scrollPane.repaint();
+    }
+
+    private static int rangesBinarySearchByPosition(int pos, List<LinkedScrollRange> rangesSorted) {
+        if (rangesSorted.isEmpty()) {
+            return -1;
+        }
+
+        if (rangesSorted.get(0).startThis > pos) {
+            // special case due to text area padding (first range starts not at zero)
+            return 0;
+        }
+
+        int lo = 0;
+        int hi = rangesSorted.size() - 1;
+        while (lo <= hi) {
+            int mid = lo + (hi - lo) / 2;
+            LinkedScrollRange midRange = rangesSorted.get(mid);
+            if (midRange.startThis > pos) hi = mid - 1;
+            else if (midRange.endThis < pos) lo = mid + 1;
+            else return mid;
+        }
+        return -1;
     }
 }
