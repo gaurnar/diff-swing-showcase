@@ -1,6 +1,7 @@
 package org.gsoft.showcase.diff.gui.components;
 
-import org.gsoft.showcase.diff.gui.forms.DiffForm;
+import org.gsoft.showcase.diff.gui.logic.DiffItemPosition;
+import org.gsoft.showcase.diff.gui.logic.ExtendedDiffItemType;
 
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
@@ -13,42 +14,6 @@ import java.util.Collections;
 import java.util.List;
 
 public final class DiffPanesScrollController {
-    public static final class DiffItemPosition {
-        private final int startA, startB;
-        private final int endA, endB;
-        private final DiffForm.ExtendedDiffItemType type;
-
-        public DiffItemPosition(int startA, int startB,
-                                int endA, int endB,
-                                DiffForm.ExtendedDiffItemType type) {
-            this.startA = startA;
-            this.startB = startB;
-            this.endA = endA;
-            this.endB = endB;
-            this.type = type;
-        }
-
-        public int getStartA() {
-            return startA;
-        }
-
-        public int getStartB() {
-            return startB;
-        }
-
-        public int getEndA() {
-            return endA;
-        }
-
-        public int getEndB() {
-            return endB;
-        }
-
-        public DiffForm.ExtendedDiffItemType getType() {
-            return type;
-        }
-    }
-
     private static final class LinkedScrollRange {
         final int startThis;
         final int endThis;
@@ -117,7 +82,7 @@ public final class DiffPanesScrollController {
 
         DiffItemPosition previousItem = diffItemPositions.get(currentDiffItemIndex - 1);
 
-        if (previousItem.type == DiffForm.ExtendedDiffItemType.EQUAL) {
+        if (previousItem.getType() == ExtendedDiffItemType.EQUAL) {
             if (currentDiffItemIndex == 1) {
                 return; // no previous item
             }
@@ -136,7 +101,7 @@ public final class DiffPanesScrollController {
 
         DiffItemPosition nextItem = diffItemPositions.get(currentDiffItemIndex + 1);
 
-        if (nextItem.type == DiffForm.ExtendedDiffItemType.EQUAL) {
+        if (nextItem.getType() == ExtendedDiffItemType.EQUAL) {
             if (currentDiffItemIndex == diffItemPositions.size() - 2) {
                 return; // no next item
             }
@@ -231,14 +196,14 @@ public final class DiffPanesScrollController {
 
         for (int i = 0; i < diffItemPositions.size(); i++) {
             DiffItemPosition item = diffItemPositions.get(i);
-            switch (item.type) {
+            switch (item.getType()) {
                 case EQUAL:
                 case MODIFIED:
-                    Rectangle firstCharRectA = textAreaA.modelToView(item.startA);
-                    Rectangle lastCharRectA = textAreaA.modelToView(item.endA);
+                    Rectangle firstCharRectA = textAreaA.modelToView(item.getStartA());
+                    Rectangle lastCharRectA = textAreaA.modelToView(item.getEndA());
 
-                    Rectangle firstCharRectB = textAreaB.modelToView(item.startB);
-                    Rectangle lastCharRectB = textAreaB.modelToView(item.endB);
+                    Rectangle firstCharRectB = textAreaB.modelToView(item.getStartB());
+                    Rectangle lastCharRectB = textAreaB.modelToView(item.getEndB());
 
                     scrollRangesA.add(new LinkedScrollRange(
                             firstCharRectA.getLocation().y,
@@ -257,10 +222,10 @@ public final class DiffPanesScrollController {
                     break;
 
                 case DELETE:
-                    firstCharRectA = textAreaA.modelToView(item.startA);
-                    lastCharRectA = textAreaA.modelToView(item.endA);
+                    firstCharRectA = textAreaA.modelToView(item.getStartA());
+                    lastCharRectA = textAreaA.modelToView(item.getEndA());
 
-                    firstCharRectB = textAreaB.modelToView(item.startB);
+                    firstCharRectB = textAreaB.modelToView(item.getStartB());
 
                     scrollRangesA.add(new LinkedScrollRange(
                             firstCharRectA.getLocation().y,
@@ -272,10 +237,10 @@ public final class DiffPanesScrollController {
                     break;
 
                 case INSERT:
-                    firstCharRectB = textAreaB.modelToView(item.startB);
-                    lastCharRectB = textAreaB.modelToView(item.endB);
+                    firstCharRectB = textAreaB.modelToView(item.getStartB());
+                    lastCharRectB = textAreaB.modelToView(item.getEndB());
 
-                    firstCharRectA = textAreaA.modelToView(item.startA);
+                    firstCharRectA = textAreaA.modelToView(item.getStartA());
 
                     scrollRangesB.add(new LinkedScrollRange(
                             firstCharRectB.getLocation().y,
@@ -287,7 +252,7 @@ public final class DiffPanesScrollController {
                     break;
 
                 default:
-                    throw new RuntimeException("unexpected diff item type: " + item.type);
+                    throw new RuntimeException("unexpected diff item type: " + item.getType());
             }
         }
 
@@ -301,7 +266,7 @@ public final class DiffPanesScrollController {
         Rectangle rect;
 
         try {
-            rect = textAreaA.modelToView(diffItemPositions.get(currentDiffItemIndex).startA);
+            rect = textAreaA.modelToView(diffItemPositions.get(currentDiffItemIndex).getStartA());
         } catch (BadLocationException e) {
             throw new RuntimeException(e);
         }
@@ -340,14 +305,14 @@ public final class DiffPanesScrollController {
 
         for (int i = minItemIndex; i <= maxItemIndex; i++) {
             DiffItemPosition position = diffItemPositions.get(i);
-            Rectangle endARect = textAreaA.modelToView(position.endA);
-            Rectangle endBRect = textAreaB.modelToView(position.endB);
+            Rectangle endARect = textAreaA.modelToView(position.getEndA());
+            Rectangle endBRect = textAreaB.modelToView(position.getEndB());
             result.add(new DiffItemPosition(
-                    textAreaA.modelToView(position.startA).y - viewportAPosition,
-                    textAreaB.modelToView(position.startB).y - viewportBPosition,
+                    textAreaA.modelToView(position.getStartA()).y - viewportAPosition,
+                    textAreaB.modelToView(position.getStartB()).y - viewportBPosition,
                     endARect.y + endARect.height - viewportAPosition,
                     endBRect.y + endBRect.height - viewportBPosition,
-                    position.type
+                    position.getType()
             ));
         }
 

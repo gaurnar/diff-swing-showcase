@@ -1,10 +1,12 @@
 package org.gsoft.showcase.diff.gui.components;
 
-import org.gsoft.showcase.diff.gui.forms.DiffForm;
+import org.gsoft.showcase.diff.gui.logic.DiffItemPosition;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
+
+import static org.gsoft.showcase.diff.gui.Colors.*;
 
 public class DiffMatchingImagePanel extends JPanel {
     private static final int TOP_PADDING = 2; // TODO calculate this
@@ -16,7 +18,7 @@ public class DiffMatchingImagePanel extends JPanel {
     //
     // TODO use dedicated type to avoid confusion
     //
-    private List<DiffPanesScrollController.DiffItemPosition> itemPositions;
+    private List<DiffItemPosition> itemPositions;
 
     public DiffMatchingImagePanel() {
         super(new BorderLayout());
@@ -38,7 +40,7 @@ public class DiffMatchingImagePanel extends JPanel {
             return;
         }
 
-        for (DiffPanesScrollController.DiffItemPosition itemPosition : itemPositions) {
+        for (DiffItemPosition itemPosition : itemPositions) {
             int[] xs, ys;
 
             switch (itemPosition.getType()) {
@@ -49,21 +51,21 @@ public class DiffMatchingImagePanel extends JPanel {
                     xs = new int[] { 0, getWidth(), getWidth(), 0};
                     ys = new int[] { itemPosition.getStartA() + TOP_PADDING, itemPosition.getStartB() + TOP_PADDING,
                             itemPosition.getEndB() + TOP_PADDING, itemPosition.getEndA() + TOP_PADDING};
-                    g.setColor(DiffForm.MODIFIED_LINES_HIGHLIGHT_COLOR);
+                    g.setColor(MODIFIED_LINES_HIGHLIGHT_COLOR);
                     break;
 
                 case INSERT:
                     xs = new int[] { 0, getWidth(), getWidth()};
                     ys = new int[] { itemPosition.getStartA() + TOP_PADDING, itemPosition.getStartB() + TOP_PADDING,
                             itemPosition.getEndB() + TOP_PADDING};
-                    g.setColor(DiffForm.INSERTED_LINES_HIGHLIGHT_COLOR);
+                    g.setColor(INSERTED_LINES_HIGHLIGHT_COLOR);
                     break;
 
                 case DELETE:
                     xs = new int[] { 0, getWidth(), 0};
                     ys = new int[] { itemPosition.getStartA() + TOP_PADDING, itemPosition.getStartB() + TOP_PADDING,
                             itemPosition.getEndA() + TOP_PADDING};
-                    g.setColor(DiffForm.DELETED_LINES_HIGHLIGHT_COLOR);
+                    g.setColor(DELETED_LINES_HIGHLIGHT_COLOR);
                     break;
 
                 default:
@@ -74,11 +76,11 @@ public class DiffMatchingImagePanel extends JPanel {
         }
     }
 
-    public List<DiffPanesScrollController.DiffItemPosition> getItemPositions() {
+    public List<DiffItemPosition> getItemPositions() {
         return itemPositions;
     }
 
-    public void setItemPositions(List<DiffPanesScrollController.DiffItemPosition> itemPositions) {
+    public void setItemPositions(List<DiffItemPosition> itemPositions) {
         this.itemPositions = itemPositions;
     }
 }

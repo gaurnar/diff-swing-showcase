@@ -3,12 +3,14 @@ package org.gsoft.showcase.diff.gui.forms;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.LinesEncoding;
 import org.gsoft.showcase.diff.generators.DiffItem;
-import org.gsoft.showcase.diff.generators.DiffItemType;
 import org.gsoft.showcase.diff.generators.impl.MyersDiffGenerator;
 import org.gsoft.showcase.diff.gui.components.DiffMatchingImagePanel;
 import org.gsoft.showcase.diff.gui.components.DiffPanesScrollController;
 import org.gsoft.showcase.diff.gui.components.InsertOrDeletePointHighlighter;
 import org.gsoft.showcase.diff.gui.components.WholeLineHighlightPainter;
+import org.gsoft.showcase.diff.gui.logic.ByLineDiffItem;
+import org.gsoft.showcase.diff.gui.logic.DiffItemPosition;
+import org.gsoft.showcase.diff.gui.logic.ExtendedDiffItemType;
 
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
@@ -21,44 +23,15 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class DiffForm extends JFrame {
-    public static final Color DELETED_LINES_HIGHLIGHT_COLOR = new Color(250, 180, 170);
-    public static final Color INSERTED_LINES_HIGHLIGHT_COLOR = new Color(174, 255, 202);
-    public static final Color MODIFIED_LINES_HIGHLIGHT_COLOR = new Color(221, 226, 255);
-    public static final Color MODIFIED_CHARS_HIGHLIGHT_COLOR = new Color(187, 211, 255);
+import static org.gsoft.showcase.diff.gui.Colors.*;
 
+public class DiffForm extends JFrame {
     private static class TextPosition {
         final int start, end;
 
         TextPosition(int start, int end) {
             this.start = start;
             this.end = end;
-        }
-    }
-
-    /**
-     * Extends {@link DiffItemType} with MODIFIED item type.
-     */
-    public enum ExtendedDiffItemType {
-        EQUAL,
-        INSERT,
-        DELETE,
-        MODIFIED
-    }
-
-    /**
-     * TODO convert to type hierarchy
-     */
-    private static final class ByLineDiffItem {
-        final ExtendedDiffItemType type;
-        final String[] strings;
-        final List<DiffItem> byCharDiffItems;
-
-        private ByLineDiffItem(ExtendedDiffItemType type, String[] strings,
-                               List<DiffItem> byCharDiffItems) {
-            this.type = type;
-            this.strings = strings;
-            this.byCharDiffItems = byCharDiffItems != null ? new ArrayList<>(byCharDiffItems) : null;
         }
     }
 
@@ -88,7 +61,7 @@ public class DiffForm extends JFrame {
 
         this.diffItems = convertByLineDiffItems(byLineDiffItems, linesEncoding);
 
-        List<DiffPanesScrollController.DiffItemPosition> diffItemPositions;
+        List<DiffItemPosition> diffItemPositions;
 
         try {
             diffItemPositions = populateDiffAreas();
@@ -177,17 +150,17 @@ public class DiffForm extends JFrame {
 
     private ByLineDiffItem createModifiedItem(ByLineDiffItem firstItem, ByLineDiffItem secondItem) {
         ByLineDiffItem deleteItem, insertItem;
-        if ((firstItem.type == ExtendedDiffItemType.DELETE) && (secondItem.type == ExtendedDiffItemType.INSERT)) {
+        if ((firstItem.getType() == ExtendedDiffItemType.DELETE) && (secondItem.getType() == ExtendedDiffItemType.INSERT)) {
             deleteItem = firstItem;
             insertItem = secondItem;
-        } else if ((firstItem.type == ExtendedDiffItemType.INSERT) && (secondItem.type == ExtendedDiffItemType.DELETE)) {
+        } else if ((firstItem.getType() == ExtendedDiffItemType.INSERT) && (secondItem.getType() == ExtendedDiffItemType.DELETE)) {
             deleteItem = secondItem;
             insertItem = firstItem;
         } else {
             throw new IllegalArgumentException("items must only be inserts or deletes!");
         }
 
-        List<DiffItem> byCharPlainItems = produceByCharDiff(deleteItem.strings, insertItem.strings);
+        List<DiffItem> byCharPlainItems = produceByCharDiff(deleteItem.getStrings(), insertItem.getStrings());
 
         return new ByLineDiffItem(ExtendedDiffItemType.MODIFIED, null, byCharPlainItems);
     }
@@ -200,44 +173,44 @@ public class DiffForm extends JFrame {
                 DiffGeneratorUtils.encodeString(a), DiffGeneratorUtils.encodeString(b));
     }
 
-    private List<DiffPanesScrollController.DiffItemPosition> populateDiffAreas() throws BadLocationException {
+    private List<DiffItemPosition> populateDiffAreas() throws BadLocationException {
         textAreaA = makeTextArea();
         textAreaB = makeTextArea();
 
-        List<DiffPanesScrollController.DiffItemPosition> diffItemPositions = new ArrayList<>();
+        List<DiffItemPosition> diffItemPositions = new ArrayList<>();
 
         for (ByLineDiffItem item : diffItems) {
-            switch (item.type) {
+            switch (item.getType()) {
                 case EQUAL:
-                    TextPosition positionA = addLinesToTextArea(textAreaA, item.strings);
-                    TextPosition positionB = addLinesToTextArea(textAreaB, item.strings);
+                    TextPosition positionA = addLinesToTextArea(textAreaA, item.getStrings());
+                    TextPosition positionB = addLinesToTextArea(textAreaB, item.getStrings());
 
-                    diffItemPositions.add(new DiffPanesScrollController.DiffItemPosition(
-                            positionA.start, positionB.start, positionA.end, positionB.end, item.type));
+                    diffItemPositions.add(new DiffItemPosition(
+                            positionA.start, positionB.start, positionA.end, positionB.end, item.getType()));
 
                     break;
 
                 case DELETE:
-                    positionA = addLinesToTextArea(textAreaA, item.strings);
+                    positionA = addLinesToTextArea(textAreaA, item.getStrings());
 
                     int nextCharPositionB = textAreaB.getLineCount() != 0 ?
                             textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1) + 1
                             : 0;
 
-                    diffItemPositions.add(new DiffPanesScrollController.DiffItemPosition(
-                            positionA.start, nextCharPositionB, positionA.end, nextCharPositionB, item.type));
+                    diffItemPositions.add(new DiffItemPosition(
+                            positionA.start, nextCharPositionB, positionA.end, nextCharPositionB, item.getType()));
 
                     break;
 
                 case INSERT:
-                    positionB = addLinesToTextArea(textAreaB, item.strings);
+                    positionB = addLinesToTextArea(textAreaB, item.getStrings());
 
                     int nextCharPositionA = textAreaA.getLineCount() != 0 ?
                             textAreaA.getLineEndOffset(textAreaA.getLineCount() - 1) + 1
                             : 0;
 
-                    diffItemPositions.add(new DiffPanesScrollController.DiffItemPosition(
-                            nextCharPositionA, positionB.start, nextCharPositionA, positionB.end, item.type));
+                    diffItemPositions.add(new DiffItemPosition(
+                            nextCharPositionA, positionB.start, nextCharPositionA, positionB.end, item.getType()));
 
                     break;
 
@@ -246,7 +219,7 @@ public class DiffForm extends JFrame {
                     break;
 
                 default:
-                    throw new RuntimeException("unexpected diff item type: " + item.type);
+                    throw new RuntimeException("unexpected diff item type: " + item.getType());
             }
         }
 
@@ -255,7 +228,7 @@ public class DiffForm extends JFrame {
         // doing it in a separate pass
         //
         for (int i = 0; i < diffItems.size(); i++) {
-            DiffPanesScrollController.DiffItemPosition itemPos = diffItemPositions.get(i);
+            DiffItemPosition itemPos = diffItemPositions.get(i);
             switch (itemPos.getType()) {
                 case EQUAL:
                     // no highlight necessary
@@ -291,7 +264,7 @@ public class DiffForm extends JFrame {
         return diffItemPositions;
     }
 
-    private void highlightByLineDiffItem(DiffPanesScrollController.DiffItemPosition item,
+    private void highlightByLineDiffItem(DiffItemPosition item,
                                          Highlighter.HighlightPainter highlightPainterA,
                                          Highlighter.HighlightPainter highlightPainterB)
             throws BadLocationException {
@@ -301,7 +274,7 @@ public class DiffForm extends JFrame {
                 highlightPainterB);
     }
 
-    private DiffPanesScrollController.DiffItemPosition addModifiedLines(ByLineDiffItem modifiedItem)
+    private DiffItemPosition addModifiedLines(ByLineDiffItem modifiedItem)
             throws BadLocationException {
         int previousLineCountA = textAreaA.getLineCount();
         if (previousLineCountA != 1) {
@@ -313,7 +286,7 @@ public class DiffForm extends JFrame {
             textAreaB.append("\n");
         }
 
-        for (DiffItem byCharItem : modifiedItem.byCharDiffItems) {
+        for (DiffItem byCharItem : modifiedItem.getByCharDiffItems()) {
             String decodedString = DiffGeneratorUtils.decodeString(byCharItem.getChars());
             switch (byCharItem.getType()) {
                 case EQUAL:
@@ -340,12 +313,12 @@ public class DiffForm extends JFrame {
         TextPosition positionB = new TextPosition(textAreaB.getLineStartOffset(previousLineCountB),
                 textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1));
 
-        return new DiffPanesScrollController.DiffItemPosition(
+        return new DiffItemPosition(
                 positionA.start, positionB.start, positionA.end, positionB.end,
                 ExtendedDiffItemType.MODIFIED);
     }
 
-    private void highlightByCharModifications(DiffPanesScrollController.DiffItemPosition position,
+    private void highlightByCharModifications(DiffItemPosition position,
                                               ByLineDiffItem modifiedItem) throws BadLocationException {
         int posB = position.getStartB();
 
@@ -355,7 +328,7 @@ public class DiffForm extends JFrame {
         //
         int[] pendingHighlightPositions = null;
 
-        for (DiffItem byCharItem : modifiedItem.byCharDiffItems) {
+        for (DiffItem byCharItem : modifiedItem.getByCharDiffItems()) {
             switch (byCharItem.getType()) {
                 case EQUAL:
                     posB += byCharItem.getChars().length;
