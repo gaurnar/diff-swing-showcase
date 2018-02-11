@@ -1,30 +1,31 @@
 package org.gsoft.showcase.diff.generators;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 public final class DiffGeneratorUtils {
-    public static final class TextsLinesEncoding {
-        private final int[] textA;
-        private final int[] textB;
+    public static final class LinesEncoding {
+        private final int[] linesA;
+        private final int[] linesB;
         private final Map<Integer, String> linesDecodingMap;
 
-        public TextsLinesEncoding(int[] textA, int[] textB, Map<Integer, String> linesDecodingMap) {
-            this.textA = textA;
-            this.textB = textB;
+        public LinesEncoding(int[] linesA, int[] linesB, Map<Integer, String> linesDecodingMap) {
+            this.linesA = linesA;
+            this.linesB = linesB;
             this.linesDecodingMap = linesDecodingMap;
         }
 
-        public int[] getTextA() {
-            return textA;
+        public int[] getLinesA() {
+            return linesA;
         }
 
-        public int[] getTextB() {
-            return textB;
+        public int[] getLinesB() {
+            return linesB;
         }
 
         public Map<Integer, String> getLinesDecodingMap() {
-            return linesDecodingMap;
+            return Collections.unmodifiableMap(linesDecodingMap);
         }
     }
 
@@ -32,6 +33,9 @@ public final class DiffGeneratorUtils {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Encode string for passing to {@link DiffGenerator#generate(int[], int[])}.
+     */
     public static int[] encodeString(String s) {
         int[] result = new int[s.length()];
         for (int i = 0; i < result.length; i++) {
@@ -40,6 +44,10 @@ public final class DiffGeneratorUtils {
         return result;
     }
 
+    /**
+     * Decode strings found in {@link DiffItem#chars}
+     * (diff must be generated based on strings encoded with {@link DiffGeneratorUtils#encodeString(java.lang.String)})
+     */
     public static String decodeString(int[] s) {
         StringBuilder stringBuilder = new StringBuilder();
         for (int c : s) {
@@ -48,36 +56,44 @@ public final class DiffGeneratorUtils {
         return stringBuilder.toString();
     }
 
-    public static TextsLinesEncoding encodeTexts(String[] textA, String[] textB) {
-        Map<String, Integer> encodingMap = new HashMap<>(textA.length);
-        Map<Integer, String> decodingMap = new HashMap<>(textA.length);
+    /**
+     * Encode text lines for passing to {@link DiffGenerator#generate(int[], int[])}.
+     * Each int will represent single line.
+     */
+    public static LinesEncoding encodeLines(String[] linesA, String[] linesB) {
+        Map<String, Integer> encodingMap = new HashMap<>(linesA.length);
+        Map<Integer, String> decodingMap = new HashMap<>(linesA.length);
 
-        int[] textAEncoded = new int[textA.length];
-        int[] textBEncoded = new int[textB.length];
+        int[] linesAEncoded = new int[linesA.length];
+        int[] linesBEncoded = new int[linesB.length];
 
-        int counter = encodeText(Integer.MIN_VALUE, textA, textAEncoded, encodingMap, decodingMap);
-        encodeText(counter, textB, textBEncoded, encodingMap, decodingMap);
+        int counter = encodeLines(Integer.MIN_VALUE, linesA, linesAEncoded, encodingMap, decodingMap);
+        encodeLines(counter, linesB, linesBEncoded, encodingMap, decodingMap);
 
-        return new TextsLinesEncoding(textAEncoded, textBEncoded, decodingMap);
+        return new LinesEncoding(linesAEncoded, linesBEncoded, decodingMap);
     }
 
-    public static String[] decodeText(int[] text, TextsLinesEncoding encoding) {
-        String[] result = new String[text.length];
-        for (int i = 0; i < text.length; i++) {
-            result[i] = encoding.getLinesDecodingMap().get(text[i]);
+    /**
+     * Decode lines found in {@link DiffItem#chars}
+     * (diff must be generated based on lines encoded with {@link DiffGeneratorUtils#encodeLines(java.lang.String[], java.lang.String[])})
+     */
+    public static String[] decodeLines(int[] lines, LinesEncoding encoding) {
+        String[] result = new String[lines.length];
+        for (int i = 0; i < lines.length; i++) {
+            result[i] = encoding.getLinesDecodingMap().get(lines[i]);
         }
         return result;
     }
 
-    private static int encodeText(int counter, String[] text, int[] encodedText,
+    private static int encodeLines(int counter, String[] lines, int[] encodedLines,
                                    Map<String, Integer> encodingMap,
                                    Map<Integer, String> decodingMap) {
-        for (int i = 0; i < text.length; i++) {
-            String s = text[i];
+        for (int i = 0; i < lines.length; i++) {
+            String s = lines[i];
             int c;
             if (!encodingMap.containsKey(s)) {
                 if (counter == Integer.MAX_VALUE) {
-                    throw new RuntimeException("analyzed texts have too many unique lines");
+                    throw new RuntimeException("too many unique lines");
                 }
                 c = counter++;
                 encodingMap.put(s, c);
@@ -85,7 +101,7 @@ public final class DiffGeneratorUtils {
             } else {
                 c = encodingMap.get(s);
             }
-            encodedText[i] = c;
+            encodedLines[i] = c;
         }
         return counter;
     }

@@ -1,9 +1,9 @@
 package org.gsoft.showcase.diff.gui;
 
-import org.gsoft.showcase.diff.generators.DiffGenerator;
-import org.gsoft.showcase.diff.generators.DiffGenerator.DiffItem;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils;
-import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.TextsLinesEncoding;
+import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.LinesEncoding;
+import org.gsoft.showcase.diff.generators.DiffItem;
+import org.gsoft.showcase.diff.generators.DiffItemType;
 import org.gsoft.showcase.diff.generators.impl.MyersDiffGenerator;
 
 import javax.swing.*;
@@ -48,6 +48,9 @@ public class DiffForm extends JFrame {
         }
     }
 
+    /**
+     * Extends {@link DiffItemType} with MODIFIED item type.
+     */
     public enum ExtendedDiffItemType {
         EQUAL,
         INSERT,
@@ -87,7 +90,7 @@ public class DiffForm extends JFrame {
 
     public DiffForm(String fileAPath, String fileBPath,
                     List<DiffItem> byLineDiffItems,
-                    TextsLinesEncoding textsLinesEncoding) {
+                    LinesEncoding linesEncoding) {
         setTitle("Diff");
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setPreferredSize(new Dimension(800, 600));
@@ -95,7 +98,7 @@ public class DiffForm extends JFrame {
         fileAPathLabel.setText(fileAPath);
         fileBPathLabel.setText(fileBPath);
 
-        this.diffItems = convertByLineDiffItems(byLineDiffItems, textsLinesEncoding);
+        this.diffItems = convertByLineDiffItems(byLineDiffItems, linesEncoding);
 
         List<DiffPanesScrollController.DiffItemPosition> diffItemPositions;
 
@@ -130,7 +133,7 @@ public class DiffForm extends JFrame {
     }
 
     private List<ByLineDiffItem> convertByLineDiffItems(List<DiffItem> plainItems,
-                                                        TextsLinesEncoding textsLinesEncoding) {
+                                                        LinesEncoding linesEncoding) {
         List<ByLineDiffItem> result = new ArrayList<>(plainItems.size()); // at least the same size
         ByLineDiffItem pendingInsertOrDelete = null;
 
@@ -139,7 +142,7 @@ public class DiffForm extends JFrame {
         // INSERT-DELETE or DELETE-INSERT into new diff element - MODIFIED
         //
         for (DiffItem plainItem : plainItems) {
-            String[] decodedStrings = decodeStrings(textsLinesEncoding, plainItem);
+            String[] decodedStrings = decodeStrings(linesEncoding, plainItem);
             switch (plainItem.getType()) {
                 case EQUAL:
                     if (pendingInsertOrDelete != null) {
@@ -206,7 +209,7 @@ public class DiffForm extends JFrame {
         int singleEqualChars = 0;
 
         for (DiffItem item : byCharPlainItems) {
-            if ((item.getType() == DiffGenerator.ItemType.EQUAL) && (item.getChars().length == 1)) {
+            if ((item.getType() == DiffItemType.EQUAL) && (item.getChars().length == 1)) {
                 singleEqualChars++;
             }
             totalChars += item.getChars().length;
@@ -493,8 +496,8 @@ public class DiffForm extends JFrame {
                 textArea.getLineEndOffset(textArea.getLineCount() - 1));
     }
 
-    private static String[] decodeStrings(TextsLinesEncoding textsLinesEncoding, DiffItem item) {
-        return DiffGeneratorUtils.decodeText(item.getChars(), textsLinesEncoding);
+    private static String[] decodeStrings(LinesEncoding linesEncoding, DiffItem item) {
+        return DiffGeneratorUtils.decodeLines(item.getChars(), linesEncoding);
     }
 
     private JTextArea makeTextArea() {

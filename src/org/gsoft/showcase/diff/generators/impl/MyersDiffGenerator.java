@@ -1,13 +1,15 @@
 package org.gsoft.showcase.diff.generators.impl;
 
 import org.gsoft.showcase.diff.generators.DiffGenerator;
+import org.gsoft.showcase.diff.generators.DiffItem;
+import org.gsoft.showcase.diff.generators.DiffItemType;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
 /**
- * As described in:
+ * Diff generator implemented as described in:
  * Myers E. An O(ND) Difference Algorithm and Its Variations.
  *
  * Available at:
@@ -66,15 +68,15 @@ public final class MyersDiffGenerator implements DiffGenerator {
                                          List<Integer> deletedCharsPending,
                                          List<DiffItem> diffItems) {
         if ((equalCharsPending != null) && !equalCharsPending.isEmpty()) {
-            diffItems.add(new DiffItem(ItemType.EQUAL, charsListToArray(equalCharsPending)));
+            diffItems.add(new DiffItem(DiffItemType.EQUAL, charsListToArray(equalCharsPending)));
             equalCharsPending.clear();
         }
         if ((insertedCharsPending != null) && !insertedCharsPending.isEmpty()) {
-            diffItems.add(new DiffItem(ItemType.INSERT, charsListToArray(insertedCharsPending)));
+            diffItems.add(new DiffItem(DiffItemType.INSERT, charsListToArray(insertedCharsPending)));
             insertedCharsPending.clear();
         }
         if ((deletedCharsPending != null) && !deletedCharsPending.isEmpty()) {
-            diffItems.add(new DiffItem(ItemType.DELETE, charsListToArray(deletedCharsPending)));
+            diffItems.add(new DiffItem(DiffItemType.DELETE, charsListToArray(deletedCharsPending)));
             deletedCharsPending.clear();
         }
     }

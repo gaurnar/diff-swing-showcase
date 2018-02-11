@@ -1,8 +1,9 @@
 package org.gsoft.showcase.diff.gui;
 
-import org.gsoft.showcase.diff.generators.DiffGenerator;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils;
-import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.TextsLinesEncoding;
+import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.LinesEncoding;
+import org.gsoft.showcase.diff.generators.DiffItem;
+import org.gsoft.showcase.diff.generators.DiffItemType;
 import org.gsoft.showcase.diff.generators.impl.MyersDiffGenerator;
 
 import javax.swing.*;
@@ -102,19 +103,19 @@ public class FileSelectionForm extends JFrame {
 
         new Thread(() -> {
             try {
-                TextsLinesEncoding textsLinesEncoding = DiffGeneratorUtils.encodeTexts(
+                LinesEncoding linesEncoding = DiffGeneratorUtils.encodeLines(
                         readFileIntoStringsSplit(fileATextField.getText()),
                         readFileIntoStringsSplit(fileBTextField.getText()));
 
-                List<DiffGenerator.DiffItem> byLineDiffItems = new MyersDiffGenerator().generate(
-                        textsLinesEncoding.getTextA(), textsLinesEncoding.getTextB());
+                List<DiffItem> byLineDiffItems = new MyersDiffGenerator().generate(
+                        linesEncoding.getLinesA(), linesEncoding.getLinesB());
 
-                if ((byLineDiffItems.size() == 1) && (byLineDiffItems.get(0).getType() == DiffGenerator.ItemType.EQUAL)) {
+                if ((byLineDiffItems.size() == 1) && (byLineDiffItems.get(0).getType() == DiffItemType.EQUAL)) {
                     JOptionPane.showMessageDialog(waitDialog, "Files are equal!", "Diff", JOptionPane.INFORMATION_MESSAGE);
                 }
 
                 DiffForm diffForm = new DiffForm(fileATextField.getText(), fileBTextField.getText(),
-                        byLineDiffItems, textsLinesEncoding);
+                        byLineDiffItems, linesEncoding);
 
                 waitDialog.dispose();
 
