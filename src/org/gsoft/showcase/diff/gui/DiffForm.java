@@ -514,7 +514,7 @@ public class DiffForm extends JFrame {
         if (osName.contains("mac ")) {
             mnemonicPrefix = "Ctrl+Alt+"; // TODO is this universal?
         } else {
-            mnemonicPrefix = "Alt+"; // TODO check it
+            mnemonicPrefix = "Alt+";
         }
 
         return "(" + mnemonicPrefix + keyDisplayName + ")";

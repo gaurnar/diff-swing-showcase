@@ -38,7 +38,6 @@ public final class MyersDiffGenerator implements DiffGenerator {
         List<EditPathVertex> editPathVertices = doMyers(a, b);
 
         for (EditPathVertex e : editPathVertices) {
-            // TODO validate edge?
             if (e.x > prevX && e.y > prevY) {
                 // diagonal edge = equal char
                 flushPendingToDiffItems(null, insertedCharsPending, deletedCharsPending, diffItems);

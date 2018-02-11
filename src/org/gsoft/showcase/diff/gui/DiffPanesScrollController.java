@@ -185,7 +185,6 @@ public final class DiffPanesScrollController {
             currentScrollRange = findRange(thisCenterPosition.y, scrollRanges);
             if (currentScrollRange == null) {
                 // not found
-                // TODO when can this happen? does not seem to affect UX
                 return;
             }
         }
@@ -387,7 +386,7 @@ public final class DiffPanesScrollController {
         }
 
         if (minItemIndex == -1 || maxItemIndex == -1) {
-            return null; // TODO is it possible?
+            return null;
         }
 
         return new int[] { minItemIndex, maxItemIndex };
