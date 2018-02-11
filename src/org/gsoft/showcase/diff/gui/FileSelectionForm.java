@@ -9,6 +9,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -36,9 +37,28 @@ public class FileSelectionForm extends JFrame {
 
             if (result == JFileChooser.APPROVE_OPTION) {
                 File selectedFile = fileChooser.getSelectedFile();
-                relatedTextField.setText(selectedFile.getAbsolutePath());
+                String selectedFilePath = selectedFile.getAbsolutePath();
+
+                try {
+                    if (isBinaryFile(selectedFilePath)) {
+                        int response = JOptionPane.showConfirmDialog(FileSelectionForm.this,
+                                "Selected file looks like a binary file. Are you sure you want to continue?", "Binary file",
+                                JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                        if (response != JOptionPane.YES_OPTION) {
+                            return;
+                        }
+                    }
+                } catch (Throwable t) {
+                    JOptionPane.showMessageDialog(FileSelectionForm.this,
+                            String.format("%s: %s", t.getClass().getSimpleName(), t.getMessage()),
+                            "Error", JOptionPane.ERROR_MESSAGE);
+                    t.printStackTrace();
+                    return;
+                }
+
+                relatedTextField.setText(selectedFilePath);
                 selectedDirectoryPath = selectedFile.getParent();
-                checkForInputComplete();
+                validateSelectedFiles();
             }
         }
     }
@@ -104,8 +124,32 @@ public class FileSelectionForm extends JFrame {
         waitDialog.setVisible(true);
     }
 
-    private void checkForInputComplete() {
+    private void validateSelectedFiles() {
+        if (fileATextField.getText().equals(fileBTextField.getText())) {
+            JOptionPane.showMessageDialog(this, "File A and file B are the same files!",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         runDiffButton.setEnabled(!fileATextField.getText().isEmpty() && !fileBTextField.getText().isEmpty());
+    }
+
+    private boolean isBinaryFile(String path) {
+        //
+        // just checking first kilobyte of the file for NULs - they should not be in a text file
+        // (ignoring something like UTF-16 - we don't support it yet)
+        //
+        byte[] buffer = new byte[1024];
+        try (FileInputStream fileInputStream = new FileInputStream(path)) {
+            int bytesRead = fileInputStream.read(buffer);
+            for (int i = 0; i < bytesRead; i++) {
+                if (buffer[i] == 0) {
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return false;
     }
 
     private static String[] readFileIntoStringsSplit(String path) {
