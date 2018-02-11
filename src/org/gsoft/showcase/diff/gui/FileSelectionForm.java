@@ -1,5 +1,6 @@
 package org.gsoft.showcase.diff.gui;
 
+import org.gsoft.showcase.diff.generators.DiffGenerator;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.TextsLinesEncoding;
 import org.gsoft.showcase.diff.generators.impl.MyersDiffGenerator;
@@ -15,6 +16,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.List;
 
 public class FileSelectionForm extends JFrame {
     private class BrowseForFileActionListener implements ActionListener {
@@ -104,9 +106,15 @@ public class FileSelectionForm extends JFrame {
                         readFileIntoStringsSplit(fileATextField.getText()),
                         readFileIntoStringsSplit(fileBTextField.getText()));
 
+                List<DiffGenerator.DiffItem> byLineDiffItems = new MyersDiffGenerator().generate(
+                        textsLinesEncoding.getTextA(), textsLinesEncoding.getTextB());
+
+                if ((byLineDiffItems.size() == 1) && (byLineDiffItems.get(0).getType() == DiffGenerator.ItemType.EQUAL)) {
+                    JOptionPane.showMessageDialog(waitDialog, "Files are equal!", "Diff", JOptionPane.INFORMATION_MESSAGE);
+                }
+
                 DiffForm diffForm = new DiffForm(fileATextField.getText(), fileBTextField.getText(),
-                        new MyersDiffGenerator().generate(textsLinesEncoding.getTextA(), textsLinesEncoding.getTextB()),
-                        textsLinesEncoding);
+                        byLineDiffItems, textsLinesEncoding);
 
                 waitDialog.dispose();
 
