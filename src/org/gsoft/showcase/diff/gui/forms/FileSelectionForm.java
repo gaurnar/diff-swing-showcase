@@ -1,4 +1,4 @@
-package org.gsoft.showcase.diff.gui;
+package org.gsoft.showcase.diff.gui.forms;
 
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.LinesEncoding;

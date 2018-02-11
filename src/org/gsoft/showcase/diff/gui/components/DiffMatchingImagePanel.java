@@ -1,4 +1,6 @@
-package org.gsoft.showcase.diff.gui;
+package org.gsoft.showcase.diff.gui.components;
+
+import org.gsoft.showcase.diff.gui.forms.DiffForm;
 
 import javax.swing.*;
 import java.awt.*;

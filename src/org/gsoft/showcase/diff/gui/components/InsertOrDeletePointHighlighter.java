@@ -1,4 +1,4 @@
-package org.gsoft.showcase.diff.gui;
+package org.gsoft.showcase.diff.gui.components;
 
 import javax.swing.plaf.TextUI;
 import javax.swing.text.BadLocationException;

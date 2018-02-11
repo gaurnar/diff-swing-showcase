@@ -1,4 +1,4 @@
-import org.gsoft.showcase.diff.gui.FileSelectionForm;
+import org.gsoft.showcase.diff.gui.forms.FileSelectionForm;
 
 import javax.swing.*;
 

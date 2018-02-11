@@ -1,10 +1,14 @@
-package org.gsoft.showcase.diff.gui;
+package org.gsoft.showcase.diff.gui.forms;
 
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.LinesEncoding;
 import org.gsoft.showcase.diff.generators.DiffItem;
 import org.gsoft.showcase.diff.generators.DiffItemType;
 import org.gsoft.showcase.diff.generators.impl.MyersDiffGenerator;
+import org.gsoft.showcase.diff.gui.components.DiffMatchingImagePanel;
+import org.gsoft.showcase.diff.gui.components.DiffPanesScrollController;
+import org.gsoft.showcase.diff.gui.components.InsertOrDeletePointHighlighter;
+import org.gsoft.showcase.diff.gui.components.WholeLineHighlightPainter;
 
 import javax.swing.*;
 import javax.swing.text.BadLocationException;

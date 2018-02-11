@@ -1,7 +1,10 @@
-package org.gsoft.showcase.diff.gui;
+package org.gsoft.showcase.diff.gui.components;
 
 import javax.swing.plaf.TextUI;
-import javax.swing.text.*;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultHighlighter;
+import javax.swing.text.Highlighter;
+import javax.swing.text.JTextComponent;
 import java.awt.*;
 
 /**
