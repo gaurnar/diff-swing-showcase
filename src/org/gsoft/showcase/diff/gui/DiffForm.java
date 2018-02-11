@@ -1,5 +1,6 @@
 package org.gsoft.showcase.diff.gui;
 
+import org.gsoft.showcase.diff.generators.DiffGenerator;
 import org.gsoft.showcase.diff.generators.DiffGenerator.DiffItem;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.TextsLinesEncoding;
@@ -13,6 +14,7 @@ import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -84,7 +86,7 @@ public class DiffForm extends JFrame {
     private JTextArea textAreaB;
 
     public DiffForm(String fileAPath, String fileBPath,
-                    List<DiffItem> diffItems,
+                    List<DiffItem> byLineDiffItems,
                     TextsLinesEncoding textsLinesEncoding) {
         setTitle("Diff");
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -93,7 +95,7 @@ public class DiffForm extends JFrame {
         fileAPathLabel.setText(fileAPath);
         fileBPathLabel.setText(fileBPath);
 
-        this.diffItems = convertDiffItems(diffItems, textsLinesEncoding);
+        this.diffItems = convertByLineDiffItems(byLineDiffItems, textsLinesEncoding);
 
         List<DiffPanesScrollController.DiffItemPosition> diffItemPositions;
 
@@ -127,56 +129,46 @@ public class DiffForm extends JFrame {
         pack();
     }
 
-    private List<ByLineDiffItem> convertDiffItems(List<DiffItem> plainItems,
-                                                  TextsLinesEncoding textsLinesEncoding) {
+    private List<ByLineDiffItem> convertByLineDiffItems(List<DiffItem> plainItems,
+                                                        TextsLinesEncoding textsLinesEncoding) {
         List<ByLineDiffItem> result = new ArrayList<>(plainItems.size()); // at least the same size
-        ByLineDiffItem pendingItem = null;
+        ByLineDiffItem pendingInsertOrDelete = null;
 
         //
-        // applying simple heuristic to improve diff display: converting consecutive
+        // applying heuristic to improve diff display: converting consecutive
         // INSERT-DELETE or DELETE-INSERT into new diff element - MODIFIED
         //
         for (DiffItem plainItem : plainItems) {
             String[] decodedStrings = decodeStrings(textsLinesEncoding, plainItem);
             switch (plainItem.getType()) {
                 case EQUAL:
-                    if (pendingItem != null) {
-                        result.add(pendingItem);
-                        pendingItem = null;
+                    if (pendingInsertOrDelete != null) {
+                        result.add(pendingInsertOrDelete);
+                        pendingInsertOrDelete = null;
                     }
                     result.add(new ByLineDiffItem(ExtendedDiffItemType.EQUAL,
                             decodedStrings,null));
                     break;
 
                 case INSERT:
-                    if (pendingItem != null) {
-                        if (pendingItem.type == ExtendedDiffItemType.DELETE) {
-                            // got DELETE-INSERT pair
-                            result.add(new ByLineDiffItem(ExtendedDiffItemType.MODIFIED,
-                                    null, generateByCharDiffItems(pendingItem.strings, decodedStrings)));
-                        } else {
-                            result.add(pendingItem);
-                        }
-                        pendingItem = null;
+                    ByLineDiffItem newInsert = new ByLineDiffItem(ExtendedDiffItemType.INSERT,
+                            decodedStrings,null);
+                    if (pendingInsertOrDelete != null) {
+                        result.addAll(tryProduceModifiedItem(pendingInsertOrDelete, newInsert));
+                        pendingInsertOrDelete = null;
                     } else {
-                        pendingItem = new ByLineDiffItem(ExtendedDiffItemType.INSERT,
-                                decodedStrings,null);
+                        pendingInsertOrDelete = newInsert;
                     }
                     break;
 
                 case DELETE:
-                    if (pendingItem != null) {
-                        if (pendingItem.type == ExtendedDiffItemType.INSERT) {
-                            // got INSERT-DELETE pair
-                            result.add(new ByLineDiffItem(ExtendedDiffItemType.MODIFIED,
-                                    null, generateByCharDiffItems(decodedStrings, pendingItem.strings)));
-                        } else {
-                            result.add(pendingItem);
-                        }
-                        pendingItem = null;
+                    ByLineDiffItem newDelete = new ByLineDiffItem(ExtendedDiffItemType.DELETE,
+                            decodedStrings,null);
+                    if (pendingInsertOrDelete != null) {
+                        result.addAll(tryProduceModifiedItem(pendingInsertOrDelete, newDelete));
+                        pendingInsertOrDelete = null;
                     } else {
-                        pendingItem = new ByLineDiffItem(ExtendedDiffItemType.DELETE,
-                                decodedStrings,null);
+                        pendingInsertOrDelete = newDelete;
                     }
                     break;
 
@@ -185,66 +177,106 @@ public class DiffForm extends JFrame {
             }
         }
 
-        if (pendingItem != null) {
-            result.add(pendingItem);
+        if (pendingInsertOrDelete != null) {
+            result.add(pendingInsertOrDelete);
         }
 
         return result;
     }
 
-    private List<ByCharDiffItem> generateByCharDiffItems(String[] deleteLines, String[] insertLines) {
-        String a = Arrays.stream(deleteLines).collect(Collectors.joining("\n"));
-        String b = Arrays.stream(insertLines).collect(Collectors.joining("\n"));
+    private List<ByLineDiffItem> tryProduceModifiedItem(ByLineDiffItem firstItem, ByLineDiffItem secondItem) {
+        ByLineDiffItem deleteItem, insertItem;
+        if ((firstItem.type == ExtendedDiffItemType.DELETE) && (secondItem.type == ExtendedDiffItemType.INSERT)) {
+            deleteItem = firstItem;
+            insertItem = secondItem;
+        } else if ((firstItem.type == ExtendedDiffItemType.INSERT) && (secondItem.type == ExtendedDiffItemType.DELETE)) {
+            deleteItem = secondItem;
+            insertItem = firstItem;
+        } else {
+            throw new IllegalArgumentException("items must only be inserts or deletes!");
+        }
 
-        List<DiffItem> byCharPlainItems = new MyersDiffGenerator().generate(
-                DiffGeneratorUtils.encodeString(a), DiffGeneratorUtils.encodeString(b));
-
-        List<ByCharDiffItem> result = new ArrayList<>(byCharPlainItems.size()); // at least the same size
-        ByCharDiffItem pendingItem = null;
+        List<DiffItem> byCharPlainItems = produceByCharDiff(deleteItem.strings, insertItem.strings);
 
         //
-        // applying same heuristic as above (creating MODIFIED items)
+        // Using simple heuristic: counting EQUAL items with single char. If there are many of these,
+        // then strings are too different to look good as MODIFIED item; we let them be a DELETE-INSERT pair.
+        //
+        int totalChars = 0;
+        int singleEqualChars = 0;
+
+        for (DiffItem item : byCharPlainItems) {
+            if ((item.getType() == DiffGenerator.ItemType.EQUAL) && (item.getChars().length == 1)) {
+                singleEqualChars++;
+            }
+            totalChars += item.getChars().length;
+        }
+
+        // TODO work on magic constants
+        if ((singleEqualChars > 3) && // for small strings
+                ((float) singleEqualChars / totalChars >= 0.03)) {
+            // too many single char EQUAL items; returning DELETE-INSERT pair
+            return Arrays.asList(firstItem, secondItem);
+        }
+
+        return Collections.singletonList(new ByLineDiffItem(ExtendedDiffItemType.MODIFIED, null,
+                convertByCharDiffItems(byCharPlainItems)));
+    }
+
+    private List<DiffItem> produceByCharDiff(String[] stringsA, String[] stringsB) {
+        String a = Arrays.stream(stringsA).collect(Collectors.joining("\n"));
+        String b = Arrays.stream(stringsB).collect(Collectors.joining("\n"));
+
+        return new MyersDiffGenerator().generate(
+                DiffGeneratorUtils.encodeString(a), DiffGeneratorUtils.encodeString(b));
+    }
+
+    private List<ByCharDiffItem> convertByCharDiffItems(List<DiffItem> byCharPlainItems) {
+        List<ByCharDiffItem> byCharDiffItems = new ArrayList<>(byCharPlainItems.size()); // at least the same size
+        ByCharDiffItem pendingInsertOrDelete = null;
+
+        //
+        // converting consecutive INSERT-DELETE or DELETE-INSERT into MODIFIED items
+        // (similar to by line diff items)
         //
         for (DiffItem plainItem : byCharPlainItems) {
             String decodedString = DiffGeneratorUtils.decodeString(plainItem.getChars());
             switch (plainItem.getType()) {
                 case EQUAL:
-                    if (pendingItem != null) {
-                        result.add(pendingItem);
-                        pendingItem = null;
+                    if (pendingInsertOrDelete != null) {
+                        byCharDiffItems.add(pendingInsertOrDelete);
+                        pendingInsertOrDelete = null;
                     }
-                    result.add(new ByCharDiffItem(ExtendedDiffItemType.EQUAL,
+                    byCharDiffItems.add(new ByCharDiffItem(ExtendedDiffItemType.EQUAL,
                             decodedString,null));
                     break;
 
                 case INSERT:
-                    if (pendingItem != null) {
-                        if (pendingItem.type == ExtendedDiffItemType.DELETE) {
-                            // got DELETE-INSERT pair
-                            result.add(new ByCharDiffItem(ExtendedDiffItemType.MODIFIED,
-                                    pendingItem.chars, decodedString));
-                        } else {
-                            result.add(pendingItem);
+                    if (pendingInsertOrDelete != null) {
+                        if (pendingInsertOrDelete.type != ExtendedDiffItemType.DELETE) {
+                            throw new IllegalArgumentException("invalid diff items sequence: consecutive inserts");
                         }
-                        pendingItem = null;
+                        // got DELETE-INSERT pair
+                        byCharDiffItems.add(new ByCharDiffItem(ExtendedDiffItemType.MODIFIED,
+                                pendingInsertOrDelete.chars, decodedString));
+                        pendingInsertOrDelete = null;
                     } else {
-                        pendingItem = new ByCharDiffItem(ExtendedDiffItemType.INSERT,
+                        pendingInsertOrDelete = new ByCharDiffItem(ExtendedDiffItemType.INSERT,
                                 decodedString,null);
                     }
                     break;
 
                 case DELETE:
-                    if (pendingItem != null) {
-                        if (pendingItem.type == ExtendedDiffItemType.INSERT) {
-                            // got INSERT-DELETE pair
-                            result.add(new ByCharDiffItem(ExtendedDiffItemType.MODIFIED,
-                                    decodedString, pendingItem.chars));
-                        } else {
-                            result.add(pendingItem);
+                    if (pendingInsertOrDelete != null) {
+                        if (pendingInsertOrDelete.type != ExtendedDiffItemType.INSERT) {
+                            throw new IllegalArgumentException("invalid diff items sequence: consecutive deletes");
                         }
-                        pendingItem = null;
+                        // got INSERT-DELETE pair
+                        byCharDiffItems.add(new ByCharDiffItem(ExtendedDiffItemType.MODIFIED,
+                                decodedString, pendingInsertOrDelete.chars));
+                        pendingInsertOrDelete = null;
                     } else {
-                        pendingItem = new ByCharDiffItem(ExtendedDiffItemType.DELETE,
+                        pendingInsertOrDelete = new ByCharDiffItem(ExtendedDiffItemType.DELETE,
                                 decodedString,null);
                     }
                     break;
@@ -254,11 +286,10 @@ public class DiffForm extends JFrame {
             }
         }
 
-        if (pendingItem != null) {
-            result.add(pendingItem);
+        if (pendingInsertOrDelete != null) {
+            byCharDiffItems.add(pendingInsertOrDelete);
         }
-
-        return result;
+        return byCharDiffItems;
     }
 
     private List<DiffPanesScrollController.DiffItemPosition> populateDiffAreas() throws BadLocationException {
