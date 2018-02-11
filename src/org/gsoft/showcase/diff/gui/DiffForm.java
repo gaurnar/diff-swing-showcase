@@ -14,7 +14,6 @@ import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -34,21 +33,6 @@ public class DiffForm extends JFrame {
     }
 
     /**
-     * TODO convert to type hierarchy
-     */
-    private static final class ByCharDiffItem {
-        final ExtendedDiffItemType type;
-        final String chars;
-        final String modifiedChars;
-
-        ByCharDiffItem(ExtendedDiffItemType type, String chars, String modifiedChars) {
-            this.type = type;
-            this.chars = chars;
-            this.modifiedChars = modifiedChars;
-        }
-    }
-
-    /**
      * Extends {@link DiffItemType} with MODIFIED item type.
      */
     public enum ExtendedDiffItemType {
@@ -64,13 +48,13 @@ public class DiffForm extends JFrame {
     private static final class ByLineDiffItem {
         final ExtendedDiffItemType type;
         final String[] strings;
-        final List<ByCharDiffItem> byCharDiffItems;
+        final List<DiffItem> byCharDiffItems;
 
         private ByLineDiffItem(ExtendedDiffItemType type, String[] strings,
-                               List<ByCharDiffItem> byCharDiffItems) {
+                               List<DiffItem> byCharDiffItems) {
             this.type = type;
             this.strings = strings;
-            this.byCharDiffItems = byCharDiffItems;
+            this.byCharDiffItems = byCharDiffItems != null ? new ArrayList<>(byCharDiffItems) : null;
         }
     }
 
@@ -157,7 +141,7 @@ public class DiffForm extends JFrame {
                     ByLineDiffItem newInsert = new ByLineDiffItem(ExtendedDiffItemType.INSERT,
                             decodedStrings,null);
                     if (pendingInsertOrDelete != null) {
-                        result.addAll(tryProduceModifiedItem(pendingInsertOrDelete, newInsert));
+                        result.add(createModifiedItem(pendingInsertOrDelete, newInsert));
                         pendingInsertOrDelete = null;
                     } else {
                         pendingInsertOrDelete = newInsert;
@@ -168,7 +152,7 @@ public class DiffForm extends JFrame {
                     ByLineDiffItem newDelete = new ByLineDiffItem(ExtendedDiffItemType.DELETE,
                             decodedStrings,null);
                     if (pendingInsertOrDelete != null) {
-                        result.addAll(tryProduceModifiedItem(pendingInsertOrDelete, newDelete));
+                        result.add(createModifiedItem(pendingInsertOrDelete, newDelete));
                         pendingInsertOrDelete = null;
                     } else {
                         pendingInsertOrDelete = newDelete;
@@ -187,7 +171,7 @@ public class DiffForm extends JFrame {
         return result;
     }
 
-    private List<ByLineDiffItem> tryProduceModifiedItem(ByLineDiffItem firstItem, ByLineDiffItem secondItem) {
+    private ByLineDiffItem createModifiedItem(ByLineDiffItem firstItem, ByLineDiffItem secondItem) {
         ByLineDiffItem deleteItem, insertItem;
         if ((firstItem.type == ExtendedDiffItemType.DELETE) && (secondItem.type == ExtendedDiffItemType.INSERT)) {
             deleteItem = firstItem;
@@ -201,29 +185,7 @@ public class DiffForm extends JFrame {
 
         List<DiffItem> byCharPlainItems = produceByCharDiff(deleteItem.strings, insertItem.strings);
 
-        //
-        // Using simple heuristic: counting EQUAL items with single char. If there are many of these,
-        // then strings are too different to look good as MODIFIED item; we let them be a DELETE-INSERT pair.
-        //
-        int totalChars = 0;
-        int singleEqualChars = 0;
-
-        for (DiffItem item : byCharPlainItems) {
-            if ((item.getType() == DiffItemType.EQUAL) && (item.getChars().length == 1)) {
-                singleEqualChars++;
-            }
-            totalChars += item.getChars().length;
-        }
-
-        // TODO work on magic constants
-        if ((singleEqualChars > 3) && // for small strings
-                ((float) singleEqualChars / totalChars >= 0.03)) {
-            // too many single char EQUAL items; returning DELETE-INSERT pair
-            return Arrays.asList(firstItem, secondItem);
-        }
-
-        return Collections.singletonList(new ByLineDiffItem(ExtendedDiffItemType.MODIFIED, null,
-                convertByCharDiffItems(byCharPlainItems)));
+        return new ByLineDiffItem(ExtendedDiffItemType.MODIFIED, null, byCharPlainItems);
     }
 
     private List<DiffItem> produceByCharDiff(String[] stringsA, String[] stringsB) {
@@ -232,67 +194,6 @@ public class DiffForm extends JFrame {
 
         return new MyersDiffGenerator().generate(
                 DiffGeneratorUtils.encodeString(a), DiffGeneratorUtils.encodeString(b));
-    }
-
-    private List<ByCharDiffItem> convertByCharDiffItems(List<DiffItem> byCharPlainItems) {
-        List<ByCharDiffItem> byCharDiffItems = new ArrayList<>(byCharPlainItems.size()); // at least the same size
-        ByCharDiffItem pendingInsertOrDelete = null;
-
-        //
-        // converting consecutive INSERT-DELETE or DELETE-INSERT into MODIFIED items
-        // (similar to by line diff items)
-        //
-        for (DiffItem plainItem : byCharPlainItems) {
-            String decodedString = DiffGeneratorUtils.decodeString(plainItem.getChars());
-            switch (plainItem.getType()) {
-                case EQUAL:
-                    if (pendingInsertOrDelete != null) {
-                        byCharDiffItems.add(pendingInsertOrDelete);
-                        pendingInsertOrDelete = null;
-                    }
-                    byCharDiffItems.add(new ByCharDiffItem(ExtendedDiffItemType.EQUAL,
-                            decodedString,null));
-                    break;
-
-                case INSERT:
-                    if (pendingInsertOrDelete != null) {
-                        if (pendingInsertOrDelete.type != ExtendedDiffItemType.DELETE) {
-                            throw new IllegalArgumentException("invalid diff items sequence: consecutive inserts");
-                        }
-                        // got DELETE-INSERT pair
-                        byCharDiffItems.add(new ByCharDiffItem(ExtendedDiffItemType.MODIFIED,
-                                pendingInsertOrDelete.chars, decodedString));
-                        pendingInsertOrDelete = null;
-                    } else {
-                        pendingInsertOrDelete = new ByCharDiffItem(ExtendedDiffItemType.INSERT,
-                                decodedString,null);
-                    }
-                    break;
-
-                case DELETE:
-                    if (pendingInsertOrDelete != null) {
-                        if (pendingInsertOrDelete.type != ExtendedDiffItemType.INSERT) {
-                            throw new IllegalArgumentException("invalid diff items sequence: consecutive deletes");
-                        }
-                        // got INSERT-DELETE pair
-                        byCharDiffItems.add(new ByCharDiffItem(ExtendedDiffItemType.MODIFIED,
-                                decodedString, pendingInsertOrDelete.chars));
-                        pendingInsertOrDelete = null;
-                    } else {
-                        pendingInsertOrDelete = new ByCharDiffItem(ExtendedDiffItemType.DELETE,
-                                decodedString,null);
-                    }
-                    break;
-
-                default:
-                    throw new RuntimeException("unexpected diff item type: " + plainItem.getType());
-            }
-        }
-
-        if (pendingInsertOrDelete != null) {
-            byCharDiffItems.add(pendingInsertOrDelete);
-        }
-        return byCharDiffItems;
     }
 
     private List<DiffPanesScrollController.DiffItemPosition> populateDiffAreas() throws BadLocationException {
@@ -408,28 +309,24 @@ public class DiffForm extends JFrame {
             textAreaB.append("\n");
         }
 
-        for (ByCharDiffItem byCharItem : modifiedItem.byCharDiffItems) {
-            switch (byCharItem.type) {
+        for (DiffItem byCharItem : modifiedItem.byCharDiffItems) {
+            String decodedString = DiffGeneratorUtils.decodeString(byCharItem.getChars());
+            switch (byCharItem.getType()) {
                 case EQUAL:
-                    textAreaA.append(byCharItem.chars);
-                    textAreaB.append(byCharItem.chars);
-                    break;
-
-                case MODIFIED:
-                    textAreaA.append(byCharItem.chars);
-                    textAreaB.append(byCharItem.modifiedChars);
+                    textAreaA.append(decodedString);
+                    textAreaB.append(decodedString);
                     break;
 
                 case INSERT:
-                    textAreaB.append(byCharItem.chars);
+                    textAreaB.append(decodedString);
                     break;
 
                 case DELETE:
-                    textAreaA.append(byCharItem.chars);
+                    textAreaA.append(decodedString);
                     break;
 
                 default:
-                    throw new RuntimeException("unexpected diff item type: " + byCharItem.type);
+                    throw new RuntimeException("unexpected diff item type: " + byCharItem.getType());
             }
         }
 
@@ -446,44 +343,54 @@ public class DiffForm extends JFrame {
 
     private void highlightByCharModifications(DiffPanesScrollController.DiffItemPosition position,
                                               ByLineDiffItem modifiedItem) throws BadLocationException {
-        int posA = position.getStartA();
         int posB = position.getStartB();
 
-        for (ByCharDiffItem byCharItem : modifiedItem.byCharDiffItems) {
-            switch (byCharItem.type) {
-                case EQUAL:
-                    // no highlight required
-                    posA += byCharItem.chars.length();
-                    posB += byCharItem.chars.length();
-                    break;
+        //
+        // applying simple heuristic to improve readability: coalescing highlight of
+        // small EQUAL items (of 3 chars or less) with neighbouring INSERT items
+        //
+        int[] pendingHighlightPositions = null;
 
-                case MODIFIED:
-                    textAreaA.getHighlighter().addHighlight(posA, posA + byCharItem.chars.length(),
-                            new DefaultHighlighter.DefaultHighlightPainter(MODIFIED_CHARS_HIGHLIGHT_COLOR));
-                    textAreaB.getHighlighter().addHighlight(posB, posB + byCharItem.modifiedChars.length(),
-                            new DefaultHighlighter.DefaultHighlightPainter(MODIFIED_CHARS_HIGHLIGHT_COLOR));
-                    posA += byCharItem.chars.length();
-                    posB += byCharItem.modifiedChars.length();
+        for (DiffItem byCharItem : modifiedItem.byCharDiffItems) {
+            switch (byCharItem.getType()) {
+                case EQUAL:
+                    posB += byCharItem.getChars().length;
+                    if (pendingHighlightPositions != null) {
+                        if (byCharItem.getChars().length <= 3) {
+                            pendingHighlightPositions[1] = posB;
+                        } else {
+                            highlightByCharModifications(pendingHighlightPositions[0], pendingHighlightPositions[1]);
+                            pendingHighlightPositions = null;
+                        }
+                    }
                     break;
 
                 case INSERT:
-                    // TODO add highlight on insertion point in A
-                    textAreaB.getHighlighter().addHighlight(posB, posB + byCharItem.chars.length(),
-                            new DefaultHighlighter.DefaultHighlightPainter(INSERTED_LINES_HIGHLIGHT_COLOR));
-                    posB += byCharItem.chars.length();
+                    if (pendingHighlightPositions != null) {
+                        pendingHighlightPositions[1] = posB + byCharItem.getChars().length;
+                    } else {
+                        pendingHighlightPositions = new int[] {posB, posB + byCharItem.getChars().length};
+                    }
+                    posB += byCharItem.getChars().length;
                     break;
 
                 case DELETE:
-                    // TODO add highlight on deletion point in B
-                    textAreaA.getHighlighter().addHighlight(posA, posA + byCharItem.chars.length(),
-                            new DefaultHighlighter.DefaultHighlightPainter(DELETED_LINES_HIGHLIGHT_COLOR));
-                    posA += byCharItem.chars.length();
+                    // ignoring
                     break;
 
                 default:
-                    throw new RuntimeException("unexpected diff item type: " + byCharItem.type);
+                    throw new RuntimeException("unexpected diff item type: " + byCharItem.getType());
             }
         }
+
+        if (pendingHighlightPositions != null) {
+            highlightByCharModifications(pendingHighlightPositions[0], pendingHighlightPositions[1]);
+        }
+    }
+
+    private void highlightByCharModifications(int start, int end) throws BadLocationException {
+        textAreaB.getHighlighter().addHighlight(start, end,
+                new DefaultHighlighter.DefaultHighlightPainter(MODIFIED_CHARS_HIGHLIGHT_COLOR));
     }
 
     private static TextPosition addLinesToTextArea(JTextArea textArea, String[] lines) throws BadLocationException {
