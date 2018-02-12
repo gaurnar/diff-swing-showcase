@@ -279,11 +279,13 @@ public class DiffForm extends JFrame {
         int previousLineCountA = textAreaA.getLineCount();
         if (previousLineCountA != 1) {
             textAreaA.append("\n");
+            previousLineCountA++;
         }
 
         int previousLineCountB = textAreaB.getLineCount();
         if (previousLineCountB != 1) {
             textAreaB.append("\n");
+            previousLineCountB++;
         }
 
         for (DiffItem byCharItem : modifiedItem.getByCharDiffItems()) {
@@ -307,10 +309,10 @@ public class DiffForm extends JFrame {
             }
         }
 
-        TextPosition positionA = new TextPosition(textAreaA.getLineStartOffset(previousLineCountA),
+        TextPosition positionA = new TextPosition(textAreaA.getLineStartOffset(previousLineCountA - 1),
                 textAreaA.getLineEndOffset(textAreaA.getLineCount() - 1));
 
-        TextPosition positionB = new TextPosition(textAreaB.getLineStartOffset(previousLineCountB),
+        TextPosition positionB = new TextPosition(textAreaB.getLineStartOffset(previousLineCountB - 1),
                 textAreaB.getLineEndOffset(textAreaB.getLineCount() - 1));
 
         return new DiffItemPosition(
@@ -374,9 +376,10 @@ public class DiffForm extends JFrame {
         int previousLineCount = textArea.getLineCount();
         if (previousLineCount != 1) {
             textArea.append("\n");
+            previousLineCount++;
         }
         textArea.append(Arrays.stream(lines).collect(Collectors.joining("\n")));
-        return new TextPosition(textArea.getLineStartOffset(previousLineCount),
+        return new TextPosition(textArea.getLineStartOffset(previousLineCount - 1),
                 textArea.getLineEndOffset(textArea.getLineCount() - 1));
     }
 
