@@ -280,6 +280,10 @@ public class DiffForm extends JFrame {
 
     private DiffItemPosition addModifiedLines(ByLineDiffItem modifiedItem)
             throws BadLocationException {
+        if (modifiedItem.getByCharDiffItems() == null) {
+            throw new IllegalArgumentException("by char diff items are absent");
+        }
+
         int previousLineCountA = textAreaA.getLineCount();
         if (previousLineCountA != 1) {
             textAreaA.append("\n");
@@ -326,39 +330,60 @@ public class DiffForm extends JFrame {
 
     private void highlightByCharModifications(DiffItemPosition position,
                                               ByLineDiffItem modifiedItem) throws BadLocationException {
+        if (modifiedItem.getByCharDiffItems() == null) {
+            throw new IllegalArgumentException("by char diff items are absent");
+        }
+
+        int posA = position.getStartA();
         int posB = position.getStartB();
 
         //
         // applying simple heuristic to improve readability: coalescing highlight of
-        // small EQUAL items (of 3 chars or less) with neighbouring INSERT items
+        // small EQUAL items (of 3 chars or less) with neighbouring INSERT/DELETE items
         //
-        int[] pendingHighlightPositions = null;
+        int[] pendingInsertPositions = null;
+        int[] pendingDeletePositions = null;
 
         for (DiffItem byCharItem : modifiedItem.getByCharDiffItems()) {
             switch (byCharItem.getType()) {
                 case EQUAL:
+                    posA += byCharItem.getChars().length;
                     posB += byCharItem.getChars().length;
-                    if (pendingHighlightPositions != null) {
-                        if (byCharItem.getChars().length <= 3) {
-                            pendingHighlightPositions[1] = posB;
-                        } else {
-                            highlightByCharModifications(pendingHighlightPositions[0], pendingHighlightPositions[1]);
-                            pendingHighlightPositions = null;
+                    if (byCharItem.getChars().length <= 3) {
+                        if (pendingDeletePositions != null) {
+                            pendingDeletePositions[1] = posA;
+                        }
+                        if (pendingInsertPositions != null) {
+                            pendingInsertPositions[1] = posB;
+                        }
+                    } else {
+                        if (pendingDeletePositions != null) {
+                            highlightByCharModifications(pendingDeletePositions[0], pendingDeletePositions[1], textAreaA);
+                            pendingDeletePositions = null;
+                        }
+                        if (pendingInsertPositions != null) {
+                            highlightByCharModifications(pendingInsertPositions[0], pendingInsertPositions[1], textAreaB);
+                            pendingInsertPositions = null;
                         }
                     }
                     break;
 
                 case INSERT:
-                    if (pendingHighlightPositions != null) {
-                        pendingHighlightPositions[1] = posB + byCharItem.getChars().length;
+                    if (pendingInsertPositions != null) {
+                        pendingInsertPositions[1] = posB + byCharItem.getChars().length;
                     } else {
-                        pendingHighlightPositions = new int[] {posB, posB + byCharItem.getChars().length};
+                        pendingInsertPositions = new int[] {posB, posB + byCharItem.getChars().length};
                     }
                     posB += byCharItem.getChars().length;
                     break;
 
                 case DELETE:
-                    // ignoring
+                    if (pendingDeletePositions != null) {
+                        pendingDeletePositions[1] = posA + byCharItem.getChars().length;
+                    } else {
+                        pendingDeletePositions = new int[] {posA, posA + byCharItem.getChars().length};
+                    }
+                    posA += byCharItem.getChars().length;
                     break;
 
                 default:
@@ -366,13 +391,16 @@ public class DiffForm extends JFrame {
             }
         }
 
-        if (pendingHighlightPositions != null) {
-            highlightByCharModifications(pendingHighlightPositions[0], pendingHighlightPositions[1]);
+        if (pendingDeletePositions != null) {
+            highlightByCharModifications(pendingDeletePositions[0], pendingDeletePositions[1], textAreaA);
+        }
+        if (pendingInsertPositions != null) {
+            highlightByCharModifications(pendingInsertPositions[0], pendingInsertPositions[1], textAreaB);
         }
     }
 
-    private void highlightByCharModifications(int start, int end) throws BadLocationException {
-        textAreaB.getHighlighter().addHighlight(start, end,
+    private static void highlightByCharModifications(int start, int end, JTextArea textArea) throws BadLocationException {
+        textArea.getHighlighter().addHighlight(start, end,
                 new DefaultHighlighter.DefaultHighlightPainter(MODIFIED_CHARS_HIGHLIGHT_COLOR));
     }
 
