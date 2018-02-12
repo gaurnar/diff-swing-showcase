@@ -223,6 +223,10 @@ public class DiffForm extends JFrame {
             }
         }
 
+        // quick fix for deleted/inserted lines highlighting at end of files
+        textAreaA.append("\n");
+        textAreaB.append("\n");
+
         //
         // we can not assign highlighters as we append line to text area;
         // doing it in a separate pass
