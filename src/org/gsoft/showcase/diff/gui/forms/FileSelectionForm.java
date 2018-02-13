@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class FileSelectionForm extends JFrame {
     private class BrowseForFileActionListener implements ActionListener {
@@ -82,19 +83,28 @@ public class FileSelectionForm extends JFrame {
             return;
         }
 
-        FileSelectionForm.this.setVisible(false);
+        AtomicBoolean stopFlag = new AtomicBoolean();
 
-        WaitDialog waitDialog = new WaitDialog();
-        waitDialog.setLocationRelativeTo(null);
+        WaitDialog waitDialog = new WaitDialog(stopFlag);
+        waitDialog.setLocationRelativeTo(this);
 
         new Thread(() -> {
             try {
                 LinesEncoding linesEncoding = DiffGeneratorUtils.encodeLines(
                         readFileIntoStringsSplit(fileATextField.getText()),
-                        readFileIntoStringsSplit(fileBTextField.getText()));
+                        readFileIntoStringsSplit(fileBTextField.getText()),
+                        stopFlag);
 
-                List<DiffItem> byLineDiffItems = new MyersDiffGenerator().generate(
+                if (stopFlag.get()) {
+                    return;
+                }
+
+                List<DiffItem> byLineDiffItems = new MyersDiffGenerator(stopFlag).generate(
                         linesEncoding.getLinesA(), linesEncoding.getLinesB());
+
+                if (stopFlag.get()) {
+                    return;
+                }
 
                 if ((byLineDiffItems.size() == 1) && (byLineDiffItems.get(0).getType() == DiffItemType.EQUAL)) {
                     JOptionPane.showMessageDialog(waitDialog, "Files are equal!", "Diff", JOptionPane.INFORMATION_MESSAGE);
@@ -103,7 +113,13 @@ public class FileSelectionForm extends JFrame {
                 DiffForm diffForm = new DiffForm(fileATextField.getText(), fileBTextField.getText(),
                         byLineDiffItems, linesEncoding);
 
+                if (stopFlag.get()) {
+                    return;
+                }
+
                 waitDialog.dispose();
+
+                FileSelectionForm.this.setVisible(false);
 
                 diffForm.setLocationRelativeTo(null);
                 diffForm.setVisible(true);

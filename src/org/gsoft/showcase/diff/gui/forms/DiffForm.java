@@ -21,6 +21,7 @@ import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static org.gsoft.showcase.diff.gui.Colors.*;
@@ -186,7 +187,7 @@ public class DiffForm extends JFrame {
         String a = Arrays.stream(stringsA).collect(Collectors.joining("\n"));
         String b = Arrays.stream(stringsB).collect(Collectors.joining("\n"));
 
-        return new MyersDiffGenerator().generate(
+        return new MyersDiffGenerator(new AtomicBoolean()).generate(
                 DiffGeneratorUtils.encodeString(a), DiffGeneratorUtils.encodeString(b));
     }
 

@@ -1,17 +1,25 @@
 package org.gsoft.showcase.diff.gui.forms;
 
 import javax.swing.*;
+import java.awt.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WaitDialog extends JDialog {
-    public WaitDialog() {
-        setTitle("Please wait");
+    private JPanel contentPane;
+    private JButton buttonCancel;
+
+    public WaitDialog(AtomicBoolean stopFlag) {
+        setContentPane(contentPane);
         setModal(true);
         setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        setPreferredSize(new Dimension(200, 100));
+        setResizable(false);
 
-        JOptionPane optionPane = new JOptionPane("Calculating diff, please wait...",
-                JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION,
-                null, new Object[]{}, null);
-        setContentPane(optionPane);
+        buttonCancel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        buttonCancel.addActionListener(e -> {
+            stopFlag.set(true);
+            dispose();
+        });
 
         pack();
     }

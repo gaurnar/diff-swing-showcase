@@ -3,6 +3,7 @@ package org.gsoft.showcase.diff.generators;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class DiffGeneratorUtils {
     public static final class LinesEncoding {
@@ -60,22 +61,22 @@ public final class DiffGeneratorUtils {
      * Encode text lines for passing to {@link DiffGenerator#generate(int[], int[])}.
      * Each int will represent single line.
      */
-    public static LinesEncoding encodeLines(String[] linesA, String[] linesB) {
+    public static LinesEncoding encodeLines(String[] linesA, String[] linesB, AtomicBoolean stopFlag) {
         Map<String, Integer> encodingMap = new HashMap<>(linesA.length);
         Map<Integer, String> decodingMap = new HashMap<>(linesA.length);
 
         int[] linesAEncoded = new int[linesA.length];
         int[] linesBEncoded = new int[linesB.length];
 
-        int counter = encodeLines(Integer.MIN_VALUE, linesA, linesAEncoded, encodingMap, decodingMap);
-        encodeLines(counter, linesB, linesBEncoded, encodingMap, decodingMap);
+        int counter = encodeLines(Integer.MIN_VALUE, linesA, linesAEncoded, encodingMap, decodingMap, stopFlag);
+        encodeLines(counter, linesB, linesBEncoded, encodingMap, decodingMap, stopFlag);
 
         return new LinesEncoding(linesAEncoded, linesBEncoded, decodingMap);
     }
 
     /**
      * Decode lines found in {@link DiffItem#chars}
-     * (diff must be generated based on lines encoded with {@link DiffGeneratorUtils#encodeLines(java.lang.String[], java.lang.String[])})
+     * (diff must be generated based on lines encoded with {@link DiffGeneratorUtils#encodeLines(java.lang.String[], java.lang.String[], java.util.concurrent.atomic.AtomicBoolean)})
      */
     public static String[] decodeLines(int[] lines, LinesEncoding encoding) {
         String[] result = new String[lines.length];
@@ -87,8 +88,15 @@ public final class DiffGeneratorUtils {
 
     private static int encodeLines(int counter, String[] lines, int[] encodedLines,
                                    Map<String, Integer> encodingMap,
-                                   Map<Integer, String> decodingMap) {
+                                   Map<Integer, String> decodingMap,
+                                   AtomicBoolean stopFlag) {
         for (int i = 0; i < lines.length; i++) {
+            if (i % 100 == 0) {
+                if (stopFlag.get()) {
+                    return 0;
+                }
+            }
+
             String s = lines[i];
             int c;
             if (!encodingMap.containsKey(s)) {

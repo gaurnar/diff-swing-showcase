@@ -5,8 +5,10 @@ import org.gsoft.showcase.diff.generators.DiffItem;
 import org.gsoft.showcase.diff.generators.DiffItemType;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Diff generator implemented as described in:
@@ -25,6 +27,12 @@ public final class MyersDiffGenerator implements DiffGenerator {
         }
     }
 
+    private final AtomicBoolean stopFlag;
+
+    public MyersDiffGenerator(AtomicBoolean stopFlag) {
+        this.stopFlag = stopFlag;
+    }
+
     @Override
     public List<DiffItem> generate(int[] a, int[] b) {
         List<DiffItem> diffItems = new ArrayList<>();
@@ -37,7 +45,14 @@ public final class MyersDiffGenerator implements DiffGenerator {
 
         List<EditPathVertex> editPathVertices = doMyers(a, b);
 
-        for (EditPathVertex e : editPathVertices) {
+        for (int i = 0; i < editPathVertices.size(); i++) {
+            if (i % 100 == 0) {
+                if (stopFlag.get()) {
+                    return Collections.emptyList();
+                }
+            }
+
+            EditPathVertex e = editPathVertices.get(i);
             if (e.x > prevX && e.y > prevY) {
                 // diagonal edge = equal char
                 flushPendingToDiffItems(null, insertedCharsPending, deletedCharsPending, diffItems);
@@ -145,7 +160,7 @@ public final class MyersDiffGenerator implements DiffGenerator {
         }
     }
 
-    private static List<EditPathVertex> doMyers(int[] a, int[] b) {
+    private List<EditPathVertex> doMyers(int[] a, int[] b) {
         // Simple, unoptimized version as described on p. 6.
         // TODO implement optimized version
 
@@ -155,6 +170,12 @@ public final class MyersDiffGenerator implements DiffGenerator {
         Vd Vd = new Vd();
 
         for (int D = 0; D <= N + M; D++) {
+            if (D % 100 == 0) {
+                if (stopFlag.get()) {
+                    return Collections.emptyList();
+                }
+            }
+
             for (int k = -D; k <= D; k += 2) {
                 int x, y;
                 if ((k == -D) || (k != D) && Vd.get(D).get(k - 1) < Vd.get(D).get(k + 1)) {
@@ -181,12 +202,18 @@ public final class MyersDiffGenerator implements DiffGenerator {
      *
      * TODO implement optimized version
      */
-    private static LinkedList<EditPathVertex> reconstructEditPath(int N, int M, int D, Vd Vd, int[] a, int[] b) {
+    private LinkedList<EditPathVertex> reconstructEditPath(int N, int M, int D, Vd Vd, int[] a, int[] b) {
         int k = N - M;
 
         LinkedList<EditPathVertex> result = new LinkedList<>();
 
         while (true) {
+            if (D % 100 == 0) {
+                if (stopFlag.get()) {
+                    return new LinkedList<>();
+                }
+            }
+
             int kx = Vd.get(D).get(k);
             int ky = kx - k;
 
