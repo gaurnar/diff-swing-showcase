@@ -42,26 +42,8 @@ public class FileSelectionForm extends JFrame {
                 File selectedFile = fileChooser.getSelectedFile();
                 String selectedFilePath = selectedFile.getAbsolutePath();
 
-                try {
-                    if (isBinaryFile(selectedFilePath)) {
-                        int response = JOptionPane.showConfirmDialog(FileSelectionForm.this,
-                                "Selected file looks like a binary file. Are you sure you want to continue?", "Binary file",
-                                JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-                        if (response != JOptionPane.YES_OPTION) {
-                            return;
-                        }
-                    }
-                } catch (Throwable t) {
-                    JOptionPane.showMessageDialog(FileSelectionForm.this,
-                            String.format("%s: %s", t.getClass().getSimpleName(), t.getMessage()),
-                            "Error", JOptionPane.ERROR_MESSAGE);
-                    t.printStackTrace();
-                    return;
-                }
-
                 relatedTextField.setText(selectedFilePath);
                 selectedDirectoryPath = selectedFile.getParent();
-                validateSelectedFiles();
             }
         }
     }
@@ -96,6 +78,10 @@ public class FileSelectionForm extends JFrame {
     }
 
     private void runDiff() {
+        if (!validateSelectedFiles()) {
+            return;
+        }
+
         FileSelectionForm.this.setVisible(false);
 
         WaitDialog waitDialog = new WaitDialog();
@@ -133,13 +119,58 @@ public class FileSelectionForm extends JFrame {
         waitDialog.setVisible(true);
     }
 
-    private void validateSelectedFiles() {
+    private boolean validateSelectedFiles() {
+        String fileAPath = fileATextField.getText().trim();
+        String fileBPath = fileBTextField.getText().trim();
+
+        if (fileAPath.isEmpty() || fileBPath.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "You must select two files!",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+
+        if (checkForAbsentFile(fileAPath) || checkForAbsentFile(fileBPath)) {
+            return false;
+        }
+
         if (fileATextField.getText().equals(fileBTextField.getText())) {
             JOptionPane.showMessageDialog(this, "File A and file B are the same files!",
                     "Error", JOptionPane.ERROR_MESSAGE);
-            return;
+            return false;
         }
-        runDiffButton.setEnabled(!fileATextField.getText().isEmpty() && !fileBTextField.getText().isEmpty());
+
+        if (checkForBinaryFile(fileAPath) || checkForBinaryFile(fileBPath)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean checkForAbsentFile(String path) {
+        if (!new File(path).isFile()) {
+            JOptionPane.showMessageDialog(this,
+                    "File does not exist:\n" + path,"Error", JOptionPane.ERROR_MESSAGE);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean checkForBinaryFile(String path) {
+        try {
+            if (isBinaryFile(path)) {
+                int response = JOptionPane.showConfirmDialog(FileSelectionForm.this,
+                        "Selected file looks like a binary file. Are you sure you want to continue?\n" + path,
+                        "Binary file", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                return response != JOptionPane.YES_OPTION;
+            }
+        } catch (Throwable t) {
+            JOptionPane.showMessageDialog(FileSelectionForm.this,
+                    String.format("%s: %s", t.getClass().getSimpleName(), t.getMessage()),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            t.printStackTrace();
+            return false;
+        }
+        return false;
     }
 
     private boolean isBinaryFile(String path) {
