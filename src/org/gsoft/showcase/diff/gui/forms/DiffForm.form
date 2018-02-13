@@ -55,6 +55,15 @@
         </properties>
         <border type="none"/>
         <children>
+          <component id="629c5" class="javax.swing.JButton" binding="compareNewButton">
+            <constraints/>
+            <properties>
+              <focusable value="false"/>
+              <font size="10"/>
+              <icon value="open.png"/>
+              <text value="Compare new files ..."/>
+            </properties>
+          </component>
           <component id="30513" class="javax.swing.JButton" binding="prevChangeButton">
             <constraints/>
             <properties>

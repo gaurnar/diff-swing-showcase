@@ -45,6 +45,7 @@ public class DiffForm extends JFrame {
     private JButton prevChangeButton;
     private JButton nextChangeButton;
     private JPanel diffMatchingWrapperPanel;
+    private JButton compareNewButton;
 
     private JTextArea textAreaA;
     private JTextArea textAreaB;
@@ -88,6 +89,22 @@ public class DiffForm extends JFrame {
         // TODO can it be done in designer?
         prevChangeButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         nextChangeButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        compareNewButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        compareNewButton.addActionListener(e -> {
+            int response = JOptionPane.showConfirmDialog(DiffForm.this,
+                    "Are you sure (current results will be lost)?", "Compare new files",
+                    JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE);
+            if (response != JOptionPane.YES_OPTION) {
+                return;
+            }
+
+            DiffForm.this.setVisible(false);
+
+            FileSelectionForm fileSelectionForm = new FileSelectionForm();
+            fileSelectionForm.setLocationRelativeTo(null);
+            fileSelectionForm.setVisible(true);
+        });
 
         setContentPane(rootPanel);
         pack();
