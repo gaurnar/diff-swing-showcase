@@ -261,19 +261,46 @@ public final class DiffPanesScrollController {
     }
 
     private void scrollLeftPaneToCurrentDiffItemPosition() {
-        JTextArea textAreaA = (JTextArea) scrollPaneA.getViewport().getView();
+        TextAreaWithOutlineRect textAreaA = (TextAreaWithOutlineRect) scrollPaneA.getViewport().getView();
+        TextAreaWithOutlineRect textAreaB = (TextAreaWithOutlineRect) scrollPaneB.getViewport().getView();
 
-        Rectangle rect;
+        DiffItemPosition currentItemPosition = diffItemPositions.get(currentDiffItemIndex);
+
+        Rectangle startRect;
 
         try {
-            rect = textAreaA.modelToView(diffItemPositions.get(currentDiffItemIndex).getStartA());
+            startRect = textAreaA.modelToView(currentItemPosition.getStartA());
+
+            textAreaA.setHighlightRect(null);
+            textAreaB.setHighlightRect(null);
+
+            if (currentItemPosition.getType() != ExtendedDiffItemType.INSERT) {
+                // adding outline to textAreaA
+                Rectangle outlineEndRect = textAreaA.modelToView(currentItemPosition.getEndA());
+
+                textAreaA.setHighlightRect(new Rectangle(0, startRect.y,
+                        textAreaA.getWidth(),outlineEndRect.y + outlineEndRect.height - startRect.y));
+            }
+
+            if (currentItemPosition.getType() != ExtendedDiffItemType.DELETE) {
+                // adding outline to textAreaB
+                Rectangle outlineStartRect = textAreaB.modelToView(currentItemPosition.getStartB());
+                Rectangle outlineEndRect = textAreaB.modelToView(currentItemPosition.getEndB());
+
+                textAreaB.setHighlightRect(new Rectangle(0, outlineStartRect.y,
+                        textAreaB.getWidth(),outlineEndRect.y + outlineEndRect.height - outlineStartRect.y));
+            }
         } catch (BadLocationException e) {
             throw new RuntimeException(e);
         }
 
+        // for outline drawing
+        textAreaA.repaint(scrollPaneA.getViewport().getViewRect());
+        textAreaB.repaint(scrollPaneB.getViewport().getViewRect());
+
         changesScrolling = true;
 
-        setViewportCenterPosition(scrollPaneA, new Point(rect.x, rect.y));
+        setViewportCenterPosition(scrollPaneA, new Point(startRect.x, startRect.y));
 
         SwingUtilities.invokeLater(() -> changesScrolling = false);
     }

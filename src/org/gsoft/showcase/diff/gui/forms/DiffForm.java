@@ -4,10 +4,7 @@ import org.gsoft.showcase.diff.generators.DiffGeneratorUtils;
 import org.gsoft.showcase.diff.generators.DiffGeneratorUtils.LinesEncoding;
 import org.gsoft.showcase.diff.generators.DiffItem;
 import org.gsoft.showcase.diff.generators.impl.MyersDiffGenerator;
-import org.gsoft.showcase.diff.gui.components.DiffMatchingImagePanel;
-import org.gsoft.showcase.diff.gui.components.DiffPanesScrollController;
-import org.gsoft.showcase.diff.gui.components.InsertOrDeletePointHighlighter;
-import org.gsoft.showcase.diff.gui.components.WholeLineHighlightPainter;
+import org.gsoft.showcase.diff.gui.components.*;
 import org.gsoft.showcase.diff.gui.logic.ByLineDiffItem;
 import org.gsoft.showcase.diff.gui.logic.DiffItemPosition;
 import org.gsoft.showcase.diff.gui.logic.ExtendedDiffItemType;
@@ -438,7 +435,7 @@ public class DiffForm extends JFrame {
     }
 
     private JTextArea makeTextArea() {
-        JTextArea textArea = new JTextArea();
+        JTextArea textArea = new TextAreaWithOutlineRect(CHANGE_HIGHLIGHT_COLOR);
         textArea.setFont(new Font("Courier New", Font.PLAIN, 11));
         textArea.setEditable(false); // TODO
         textArea.setLineWrap(false);
