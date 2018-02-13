@@ -16,8 +16,6 @@ import java.util.List;
  * https://neil.fraser.name/software/diff_match_patch/myers.pdf
  */
 public final class MyersDiffGenerator implements DiffGenerator {
-    private static final int MAX_SCRIPT_SIZE = 10000;
-
     private static final class EditPathVertex {
         final int x, y;
 
@@ -81,6 +79,72 @@ public final class MyersDiffGenerator implements DiffGenerator {
         }
     }
 
+    /**
+     * emulating V being [-MAX .. MAX] array
+     */
+    private static final class V {
+        final int[] nonNegativeV;
+        final int[] negativeV;
+
+        V(int D, V previous) {
+            nonNegativeV = new int[D + 1];
+            negativeV = new int[D + 1];
+
+            if (previous != null) {
+                // copying from previous iteration
+                System.arraycopy(previous.nonNegativeV, 0,
+                        nonNegativeV, 0, previous.nonNegativeV.length);
+                System.arraycopy(previous.negativeV, 0,
+                        negativeV, 0, previous.negativeV.length);
+            }
+        }
+
+        int get(int i) {
+            if (i >= 0) {
+                if (i < nonNegativeV.length) {
+                    return nonNegativeV[i];
+                } else {
+                    return 0;
+                }
+            } else {
+                if (Math.abs(i) < negativeV.length) {
+                    return negativeV[Math.abs(i)];
+                } else {
+                    return 0;
+                }
+            }
+        }
+
+        void set(int i, int value) {
+            if (i >= 0) {
+                nonNegativeV[i] = value;
+            } else {
+                negativeV[Math.abs(i)] = value;
+            }
+        }
+    }
+
+    private static final class Vd {
+        /**
+         * need to store V for every D iteration (needed for reconstructEditPath)
+         */
+        final ArrayList<V> vs;
+
+        Vd() {
+            vs = new ArrayList<>();
+        }
+
+        V get(int D) {
+            if (D < vs.size()) {
+                return vs.get(D);
+            } else {
+                V newV = new V(D, D > 0 ? vs.get(D - 1) : null);
+                vs.add(newV);
+                return newV;
+            }
+        }
+    }
+
     private static List<EditPathVertex> doMyers(int[] a, int[] b) {
         // Simple, unoptimized version as described on p. 6.
         // TODO implement optimized version
@@ -88,34 +152,27 @@ public final class MyersDiffGenerator implements DiffGenerator {
         final int N = a.length;
         final int M = b.length;
 
-        // need to store V for every D iteration (needed for reconstructEditPath later)
-        // TODO run algorithm twice (to allocate only for D iterations instead of MAX_SCRIPT_SIZE)
-        final int[][] Vd = new int[MAX_SCRIPT_SIZE][];
+        Vd Vd = new Vd();
 
-        Vd[0] = new int[MAX_SCRIPT_SIZE * 2];
-
-        for (int D = 0; D < MAX_SCRIPT_SIZE; D++) {
-            if (D != 0) {
-                Vd[D] = Vd[D - 1].clone();
-            }
+        for (int D = 0; D <= N + M; D++) {
             for (int k = -D; k <= D; k += 2) {
                 int x, y;
-                if ((k == -D) || (k != D) && Vd[D][indexV(k - 1)] < Vd[D][indexV(k + 1)]) {
-                    x = Vd[D][indexV(k + 1)];
+                if ((k == -D) || (k != D) && Vd.get(D).get(k - 1) < Vd.get(D).get(k + 1)) {
+                    x = Vd.get(D).get(k + 1);
                 } else {
-                    x = Vd[D][indexV(k - 1)] + 1;
+                    x = Vd.get(D).get(k - 1) + 1;
                 }
                 y = x - k;
                 while (x < N && y < M && charAt(a, x + 1) == charAt(b, y + 1)) {
                     x++; y++;
                 }
-                Vd[D][indexV(k)] = x;
+                Vd.get(D).set(k, x);
                 if (x >= N && y >= M) {
                     return reconstructEditPath(N, M, D, Vd, a, b);
                 }
             }
         }
-        throw new RuntimeException("edit script is too long!");
+        throw new RuntimeException("bogus edit script length"); // should not happen
     }
 
     /**
@@ -124,13 +181,13 @@ public final class MyersDiffGenerator implements DiffGenerator {
      *
      * TODO implement optimized version
      */
-    private static LinkedList<EditPathVertex> reconstructEditPath(int N, int M, int D, int[][] Vd, int[] a, int[] b) {
+    private static LinkedList<EditPathVertex> reconstructEditPath(int N, int M, int D, Vd Vd, int[] a, int[] b) {
         int k = N - M;
 
         LinkedList<EditPathVertex> result = new LinkedList<>();
 
         while (true) {
-            int kx = Vd[D][indexV(k)];
+            int kx = Vd.get(D).get(k);
             int ky = kx - k;
 
             int x = kx;
@@ -140,8 +197,8 @@ public final class MyersDiffGenerator implements DiffGenerator {
 
             while (x >= 1 && y >= 1 && charAt(a, x) == charAt(b, y)) {
                 if (D != 0 &&
-                        (Vd[D - 1][indexV(k + 1)] == x || // vertical edge
-                                Vd[D - 1][indexV(k - 1)] == x - 1)) { // horizontal edge
+                        (Vd.get(D - 1).get(k + 1) == x || // vertical edge
+                                Vd.get(D - 1).get(k - 1) == x - 1)) { // horizontal edge
                     snakeLenWithNonDiagonalEdge = currentSnakeLen;
                 }
 
@@ -169,10 +226,10 @@ public final class MyersDiffGenerator implements DiffGenerator {
             if (D == 0) {
                 break;
             } else {
-                if (Vd[D - 1][indexV(k + 1)] == x) {
+                if (Vd.get(D - 1).get(k + 1) == x) {
                     // vertical edge
                     k++; D--;
-                } else if (Vd[D - 1][indexV(k - 1)] == x - 1) {
+                } else if (Vd.get(D - 1).get(k - 1) == x - 1) {
                     // horizontal edge
                     k--; D--;
                 } else {
@@ -183,13 +240,6 @@ public final class MyersDiffGenerator implements DiffGenerator {
         }
 
         return result;
-    }
-
-    /**
-     * to emulate V being [-MAX .. MAX] array
-     */
-    private static int indexV(int i) {
-        return i + MAX_SCRIPT_SIZE;
     }
 
     /**
